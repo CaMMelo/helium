@@ -1,0 +1,15 @@
+import std.io
+
+sum_loop = (n: i32): i32 {
+    loop (acc = 0, i: i32 = 0) {
+        if (i >= n) {
+            acc
+        } else {
+            recur(acc + i, i + 1)
+        }
+    }
+};
+
+main = () : IO<()> {
+    io.println(f"sum_loop(10) = {sum_loop(10)}");
+}

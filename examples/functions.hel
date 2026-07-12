@@ -1,0 +1,27 @@
+import std.io
+
+make_adder = (x: i32): fn(i32) -> i32 {
+    (y: i32): i32 {
+        x + y
+    }
+};
+
+apply = (f: fn(i32) -> i32, x: i32): i32 {
+    f(x)
+};
+
+inc = (n: i32): i32 {
+    n + 1
+};
+
+fib = (n: i32): i32 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => fib(n - 1) + fib(n - 2)
+    }
+};
+
+main = () : IO<()> {
+    io.println(f"fib(10) = {fib(10)}");
+}

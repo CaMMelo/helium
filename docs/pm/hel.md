@@ -1,0 +1,135 @@
+# `hel` Package Manager Specification
+
+## 1. Overview
+
+`hel` is the command-line package manager for Helium. It is a separate tool from
+the compiler. It manages manifests, dependencies, builds, and execution.
+
+## 2. Commands
+
+### `hel init [name]`
+
+Creates a new Helium project with the following layout:
+
+```
+.
+├── build/
+├── lib/
+│   └── math.hel
+├── src/
+│   └── main.hel
+├── tests/
+│   └── smoke_test.hel
+├── .helium/
+├── .env
+├── Heliumfile.lock
+└── Heliumfile
+```
+
+- `build/` — build artifacts.
+- `lib/` — local library modules.
+- `src/` — application source.
+- `tests/` — test sources.
+- `.helium/` — dependency cache, organized as `.helium/<name>/<version>/`.
+- `.env` — environment variables for local development.
+- `Heliumfile` — project manifest.
+- `Heliumfile.lock` — resolved dependency graph.
+
+Default files created by `init`:
+
+- `src/main.hel` containing a minimal `main`.
+- `lib/math.hel` containing a minimal module example.
+- `tests/smoke_test.hel` containing a minimal test entry point.
+
+### `hel build`
+
+Resolves dependencies, compiles the project, and produces an executable in
+`build/`.
+
+Steps:
+
+1. Read `Heliumfile` and `Heliumfile.lock`.
+2. Ensure cached dependencies exist in `.helium/`.
+3. Invoke the Helium compiler with the correct module search paths.
+4. Link the resulting objects and any required `.so`/`.o` dependencies.
+5. Place the final binary in `build/`.
+
+### `hel run`
+
+Builds the project if needed and then runs the produced binary.
+
+### `hel test`
+
+Builds the project if needed and then runs the test suite defined in
+`tests/`. The test harness and discovery rules are specified in
+SPEC-010. `hel test` must report pass/fail per test and exit with a non-zero
+status if any test fails.
+
+### `hel add <package>[@<version>]`
+
+Adds a dependency to `Heliumfile`, resolves the dependency graph, downloads
+compiled artifacts and interface definitions into `.helium/`, and updates
+`Heliumfile.lock`.
+
+### `hel remove <package>`
+
+Removes a dependency from `Heliumfile` and updates the lock file.
+
+### `hel update [package]`
+
+Updates dependencies to the latest compatible version and regenerates the lock
+file. If a package is specified, only that package is updated.
+
+## 3. Manifest format (`Heliumfile`)
+
+TOML-based:
+
+```toml
+[package]
+name = "myproject"
+version = "0.1.0"
+edition = "2025"
+
+[dependencies]
+std = { version = "0.1.0", registry = "https://packages.helium.dev" }
+```
+
+## 4. Dependency layout
+
+Dependencies are stored as compiled artifacts plus interface metadata:
+
+```
+.helium/
+└── std/
+    └── 0.1.0/
+        ├── libstd.so
+        ├── libstd.o
+        └── interface/
+            └── io.hei
+```
+
+The compiler uses the interface files for type checking and the object/shared
+files for linking.
+
+## 5. Registries
+
+A registry serves packages as tarballs containing compiled artifacts and
+metadata. The default registry is configured in `Heliumfile` or a global config
+file.
+
+## 6. Lock file
+
+`Heliumfile.lock` records the exact versions and checksums of resolved
+dependencies so that builds are reproducible.
+
+## 7. Good and bad cases
+
+The package manager must have tests for:
+
+- Creating a project with `init`.
+- Building a project with no dependencies.
+- Building a project with local `lib/` modules.
+- Running tests with `test`.
+- Adding, removing, and updating dependencies.
+- Failing when a dependency cannot be found.
+- Failing when the lock file is inconsistent with the manifest.

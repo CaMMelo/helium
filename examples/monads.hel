@@ -1,0 +1,7 @@
+import std.io
+
+main = () : IO<()> {
+    io.println("Hello") >>= (_: ()) {
+        io.println("World")
+    }
+}

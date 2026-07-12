@@ -1,0 +1,6 @@
+import math;
+import std.io
+
+main = () : IO<()> {
+    io.println(f"area(2.0) = {math.area(2.0)}");
+}
