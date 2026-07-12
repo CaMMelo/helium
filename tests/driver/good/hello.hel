@@ -1,0 +1,9 @@
+// @name driver_hello
+// @phase driver
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.println("driver hello");
+}

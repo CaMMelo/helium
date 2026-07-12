@@ -1,0 +1,10 @@
+// @name driver_syntax_error
+// @phase driver
+// @expect error
+// @match unexpected
+
+import std.io
+
+main = () : IO<()> {
+    io.println("missing paren"
+}

@@ -1,0 +1,11 @@
+// @name driver_emit_ast
+// @phase driver
+// @expect success
+// @command ./build/bin/helium --emit-ast tests/driver/good/emit_ast.hel
+// @match \(module
+
+import std.io
+
+main = () : IO<()> {
+    io.println("emit ast");
+}

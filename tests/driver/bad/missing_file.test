@@ -1,0 +1,5 @@
+# @name driver_missing_file
+# @phase driver
+# @expect error
+# @command ./build/bin/helium tests/driver/bad/does_not_exist.hel -o /tmp/helium_missing
+# @match error:

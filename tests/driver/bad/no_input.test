@@ -1,0 +1,5 @@
+# @name driver_no_input
+# @phase driver
+# @expect error
+# @command ./build/bin/helium --emit-ast
+# @match Usage

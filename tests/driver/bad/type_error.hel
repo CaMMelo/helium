@@ -1,0 +1,10 @@
+// @name driver_type_error
+// @phase driver
+// @expect error
+// @match unbound identifier
+
+import std.io
+
+main = () : IO<()> {
+    io.println(unknown_var);
+}
