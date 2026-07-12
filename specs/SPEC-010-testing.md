@@ -17,19 +17,38 @@ Define and implement how Helium programs and compiler passes are tested.
 
 ## Requirements
 
-1. Organize tests by language construct:
+1. Organize tests by language construct.  Each construct directory has
+   `good/` and `bad/` subdirectories:
    ```
    tests/
+   ├── run_tests.py
    ├── lexer/
+   │   ├── good/
+   │   └── bad/
    ├── parser/
+   │   ├── good/
+   │   └── bad/
    ├── type/
+   │   ├── good/
+   │   └── bad/
    ├── codegen/
+   │   ├── good/
+   │   └── bad/
    ├── modules/
+   │   ├── good/
+   │   └── bad/
    ├── ffi/
+   │   ├── good/
+   │   └── bad/
    ├── stdlib/
+   │   ├── good/
+   │   └── bad/
    └── pm/
+       ├── good/
+       └── bad/
    ```
-2. Each test is a small Helium program or a test description file.
+2. Each test is a small Helium program (`.hel`) or a test description file
+   (`.test`).  Good cases live under `good/`; bad cases live under `bad/`.
 3. Good cases:
    - Must compile.
    - Must run and produce expected output when applicable.

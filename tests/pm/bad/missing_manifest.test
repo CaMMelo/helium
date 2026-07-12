@@ -1,0 +1,5 @@
+# @name missing_manifest
+# @phase pm
+# @expect error
+# @command build/bin/hel build
+# @match Heliumfile|manifest|not found|error

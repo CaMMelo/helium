@@ -1,0 +1,9 @@
+// @name unterminated_string
+// @phase lexer
+// @expect error
+
+x = "this string never ends;
+
+main = () : IO<()> {
+    0
+}

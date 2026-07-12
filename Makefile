@@ -76,5 +76,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 test: all
-	@echo "Test harness not yet integrated."
-	@echo "Run ./tests/run_tests.sh once SPEC-010 is implemented."
+	./tests/run_tests.py

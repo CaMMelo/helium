@@ -1,0 +1,5 @@
+# @name hel_init
+# @phase pm
+# @expect success
+# @command build/bin/hel init pm_smoke_project
+# @match Created project|bootstrap

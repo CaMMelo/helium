@@ -1,0 +1,13 @@
+// @name simple_function
+// @phase parser
+// @expect success
+
+import std.io
+
+add = (a: i32, b: i32): i32 {
+    a + b
+};
+
+main = () : IO<()> {
+    io.println(f"add(5, 6) = {add(5, 6)}");
+}

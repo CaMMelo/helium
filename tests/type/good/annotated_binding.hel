@@ -1,0 +1,11 @@
+// @name annotated_binding
+// @phase type
+// @expect success
+
+import std.io
+
+answer: i32 = 42;
+
+main = () : IO<()> {
+    io.println(f"answer = {answer}");
+}

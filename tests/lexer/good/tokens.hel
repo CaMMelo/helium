@@ -1,0 +1,15 @@
+// @name tokens
+// @phase lexer
+// @expect success
+
+// A minimal program exercising a variety of lexemes.
+import std.io
+
+answer: i32 = 42;
+pi: f64 = 3.14;
+flag: bool = true;
+greeting: str = "hello";
+
+main = () : IO<()> {
+    io.println(greeting);
+}

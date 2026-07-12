@@ -1,0 +1,11 @@
+// @name foreign_decl
+// @phase ffi
+// @expect success
+
+import std.io
+
+foreign strlen : fn(str) -> i32;
+
+main = () : IO<()> {
+    io.println("ffi declared");
+}

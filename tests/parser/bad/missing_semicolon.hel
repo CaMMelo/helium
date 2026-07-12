@@ -1,0 +1,12 @@
+// @name missing_semicolon
+// @phase parser
+// @expect error
+
+import std.io
+
+a = 1
+b = 2
+
+main = () : IO<()> {
+    io.println("nope")
+}
