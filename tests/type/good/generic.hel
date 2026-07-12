@@ -1,0 +1,9 @@
+foreign io_unit: IO<()>;
+
+identity = <T>(x: T): T { x };
+
+a = identity(1);
+b = identity("hello");
+c: i32 = identity(2);
+
+main = io_unit;

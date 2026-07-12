@@ -1,0 +1,19 @@
+foreign io_unit: IO<()>;
+
+add = (a: i32, b: i32): i32 {
+    a + b
+};
+
+answer = () {
+    42
+};
+
+fib = (n: i32): i32 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => fib(n - 1) + fib(n - 2)
+    }
+};
+
+main = io_unit;

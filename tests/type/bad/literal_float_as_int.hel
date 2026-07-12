@@ -1,0 +1,5 @@
+foreign io_unit: IO<()>;
+
+x: i32 = 1.0;
+
+main = io_unit;

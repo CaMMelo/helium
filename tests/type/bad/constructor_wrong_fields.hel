@@ -1,0 +1,9 @@
+foreign io_unit: IO<()>;
+
+type Shape =
+    | Circle { radius: f64 }
+    ;
+
+s = Circle{ diameter: 1.0 };
+
+main = io_unit;

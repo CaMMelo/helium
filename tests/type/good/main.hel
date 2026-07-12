@@ -1,0 +1,3 @@
+foreign io_unit: IO<()>;
+
+main: IO<()> = io_unit;

@@ -1,0 +1,16 @@
+foreign io_unit: IO<()>;
+
+a = 0;
+b: i32 = 0;
+c = 1.0;
+d: f32 = 1.0;
+e: f64 = 1.0;
+f = true;
+g: bool = false;
+h = "Hello!";
+i: str = "Hello!";
+j = [1, 2, 3, 4, 5];
+k: [i32; 5] = [1, 2, 3, 4, 5];
+empty = ();
+
+main = io_unit;

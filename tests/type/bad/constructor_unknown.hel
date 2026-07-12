@@ -1,0 +1,5 @@
+foreign io_unit: IO<()>;
+
+p = Unknown{ x: 1.0 };
+
+main = io_unit;

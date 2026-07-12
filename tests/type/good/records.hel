@@ -1,0 +1,9 @@
+foreign io_unit: IO<()>;
+
+type Point = { x: f64, y: f64 };
+
+p = Point{ x: 1.0, y: 2.0 };
+q: Point = Point{ x: 3.0, y: 4.0 };
+x = p.x;
+
+main = io_unit;
