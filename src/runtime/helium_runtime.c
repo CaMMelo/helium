@@ -5,6 +5,7 @@
 
 #include "helium_runtime.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -181,6 +182,75 @@ helium_alloc_closure(helium_generic_fn_t fn, void *env,
 	clo->env_destroy = env_destroy;
 
 	return clo;
+}
+
+/*
+ * Bootstrap std.io helpers.  These are temporary foreign functions used by
+ * tests while the standard library is not yet implemented.
+ */
+int64_t
+io_println(const char *s)
+{
+	puts(s ? s : "");
+	return 0;
+}
+
+int64_t
+io_prints(const char *s)
+{
+	fputs(s ? s : "", stdout);
+	return 0;
+}
+
+int64_t
+io_printi(int32_t n)
+{
+	printf("%d", n);
+	return 0;
+}
+
+char *
+helium_format_i32(int32_t n)
+{
+	char *buf = malloc(16);
+
+	if (!buf)
+		abort();
+	snprintf(buf, 16, "%d", n);
+	return buf;
+}
+
+char *
+helium_format_i64(int64_t n)
+{
+	char *buf = malloc(32);
+
+	if (!buf)
+		abort();
+	snprintf(buf, 32, "%ld", (long)n);
+	return buf;
+}
+
+char *
+helium_format_bool(int8_t b)
+{
+	char *buf = malloc(6);
+
+	if (!buf)
+		abort();
+	snprintf(buf, 6, "%s", b ? "true" : "false");
+	return buf;
+}
+
+char *
+helium_format_f64(double n)
+{
+	char *buf = malloc(64);
+
+	if (!buf)
+		abort();
+	snprintf(buf, 64, "%g", n);
+	return buf;
 }
 
 void

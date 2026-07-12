@@ -640,11 +640,15 @@ struct helium_ir_instr *helium_ir_instr_fstring(int line, int col)
 void helium_ir_fstring_add_text(struct helium_ir_instr *fstring,
 				const char *text, int line, int col)
 {
-	struct helium_fstring_part *part;
+	struct helium_ir_fstring_part *part;
 
 	if (fstring->kind != HELIUM_IR_INSTR_FSTRING)
 		return;
-	part = helium_fstring_part_text(text, line, col);
+	part = xalloc(sizeof(*part));
+	part->is_expr = 0;
+	part->u.text = xstrdup(text);
+	part->line = line;
+	part->col = col;
 	append_ptr((void ***)&fstring->u.fstring.parts,
 		   &fstring->u.fstring.part_count,
 		   &fstring->u.fstring.part_capacity, part);
@@ -653,15 +657,18 @@ void helium_ir_fstring_add_text(struct helium_ir_instr *fstring,
 void helium_ir_fstring_add_expr(struct helium_ir_instr *fstring,
 				struct helium_ir_instr *expr)
 {
-	struct helium_fstring_part *part;
+	struct helium_ir_fstring_part *part;
 
 	if (fstring->kind != HELIUM_IR_INSTR_FSTRING)
 		return;
-	part = helium_fstring_part_text("", 0, 0);
+	part = xalloc(sizeof(*part));
+	part->is_expr = 1;
+	part->u.expr = expr;
+	part->line = expr->line;
+	part->col = expr->col;
 	append_ptr((void ***)&fstring->u.fstring.parts,
 		   &fstring->u.fstring.part_count,
 		   &fstring->u.fstring.part_capacity, part);
-	(void)expr;
 }
 
 struct helium_ir_let_binding *helium_ir_let_binding_new(const char *name,
@@ -795,8 +802,15 @@ void helium_ir_instr_free(struct helium_ir_instr *instr)
 		helium_ir_instr_free(instr->u.unary.operand);
 		break;
 	case HELIUM_IR_INSTR_FSTRING:
-		for (i = 0; i < instr->u.fstring.part_count; i++)
-			helium_fstring_part_free(instr->u.fstring.parts[i]);
+		for (i = 0; i < instr->u.fstring.part_count; i++) {
+			struct helium_ir_fstring_part *p = instr->u.fstring.parts[i];
+
+			if (!p->is_expr)
+				free(p->u.text);
+			else
+				helium_ir_instr_free(p->u.expr);
+			free(p);
+		}
 		free(instr->u.fstring.parts);
 		break;
 	}

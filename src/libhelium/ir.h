@@ -10,6 +10,19 @@
 
 #include "ast.h"
 
+/* IR-specific f-string part; the AST part holds expressions, the IR part
+ * holds instructions.
+ */
+struct helium_ir_fstring_part {
+	int is_expr;
+	union {
+		char *text;
+		struct helium_ir_instr *expr;
+	} u;
+	int line;
+	int col;
+};
+
 /* -------------------------------------------------------------------------- */
 /* Program, functions, and types                                              */
 /* -------------------------------------------------------------------------- */
@@ -237,7 +250,7 @@ struct helium_ir_instr {
 			struct helium_ir_instr *operand;
 		} unary;
 		struct {
-			struct helium_fstring_part **parts;
+			struct helium_ir_fstring_part **parts;
 			size_t part_count;
 			size_t part_capacity;
 		} fstring;

@@ -1799,7 +1799,17 @@ static int check_main(struct helium_env *env, struct helium_subst **subst,
 
 	main_type = helium_scheme_instantiate(scheme, *subst);
 	expected = make_io_type(make_unit_type());
-	rc = helium_type_unify(main_type, expected, subst, error);
+
+	/* Allow either IO<()> or a nullary function returning IO<()>. */
+	if (main_type->kind == HELIUM_TYPE_FN &&
+	    main_type->param_count == 0 &&
+	    main_type->ret &&
+	    helium_type_unify(main_type->ret, expected, subst, error) == 0) {
+		rc = 0;
+	} else {
+		rc = helium_type_unify(main_type, expected, subst, error);
+	}
+
 	helium_type_free(main_type);
 	helium_type_free(expected);
 	return rc;
