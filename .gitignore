@@ -9,3 +9,4 @@ tests/lexer/*.err
 # Python cache
 __pycache__/
 *.py[cod]
+.worktrees/
