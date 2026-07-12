@@ -1428,7 +1428,7 @@ int helium_codegen_program(struct helium_ir_program *prog,
 		}
 	}
 
-	if (emit_main_wrapper(&ctx) < 0) {
+	if (prog->main_name && emit_main_wrapper(&ctx) < 0) {
 		format_error(error, "failed to emit main wrapper");
 		rc = -1;
 		goto out;

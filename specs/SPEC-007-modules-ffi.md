@@ -43,9 +43,9 @@ add : fn(i32, i32) -> i32
 
 ## Acceptance criteria
 
-- [ ] A program imports a local `lib/` module and uses its values.
-- [ ] A program imports a cached dependency module and links to its compiled
+- [x] A program imports a local `lib/` module and uses its values.
+- [x] A program imports a cached dependency module and links to its compiled
       artifacts.
-- [ ] A foreign function declared in Helium can call a C function from a linked
+- [x] A foreign function declared in Helium can call a C function from a linked
       library.
-- [ ] Missing modules and name resolution failures produce clear errors.
+- [x] Missing modules and name resolution failures produce clear errors.

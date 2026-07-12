@@ -23,6 +23,14 @@ struct helium_typed_module {
 int helium_infer_module(struct helium_module *module,
 			struct helium_typed_module **out, char **error);
 
+/*
+ * Type-check a module without requiring a "main" binding.  Used when
+ * compiling library modules separately.
+ */
+int helium_infer_module_no_main(struct helium_module *module,
+				struct helium_typed_module **out,
+				char **error);
+
 /* Convenience wrapper that discards the typed view. */
 int helium_check_module(struct helium_module *module, char **error);
 

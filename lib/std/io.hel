@@ -1,0 +1,5 @@
+module io;
+
+foreign println : fn(str) -> IO<()>;
+foreign prints : fn(str) -> IO<()>;
+foreign printi : fn(i32) -> IO<()>;

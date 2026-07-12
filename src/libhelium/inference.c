@@ -2044,8 +2044,9 @@ void helium_typed_module_free(struct helium_typed_module *typed)
 	free(typed);
 }
 
-int helium_infer_module(struct helium_module *module,
-			struct helium_typed_module **out, char **error)
+static int infer_module_internal(struct helium_module *module,
+				 struct helium_typed_module **out,
+				 char **error, int require_main)
 {
 	struct helium_typed_module *typed = NULL;
 	struct helium_env *env;
@@ -2074,7 +2075,7 @@ int helium_infer_module(struct helium_module *module,
 
 		switch (decl->kind) {
 		case HELIUM_DECL_IMPORT:
-			/* Imports are not resolved during type checking. */
+			/* Imports are resolved before type checking. */
 			break;
 		case HELIUM_DECL_TYPE:
 			if (register_type_def(env, decl->u.type_def, error) < 0) {
@@ -2138,7 +2139,7 @@ int helium_infer_module(struct helium_module *module,
 		}
 	}
 
-	if (check_main(env, &ctx.subst, error) < 0) {
+	if (require_main && check_main(env, &ctx.subst, error) < 0) {
 		rc = -1;
 		goto out;
 	}
@@ -2160,6 +2161,19 @@ out:
 	helium_env_free(env);
 	helium_subst_free(ctx.subst);
 	return rc;
+}
+
+int helium_infer_module(struct helium_module *module,
+			struct helium_typed_module **out, char **error)
+{
+	return infer_module_internal(module, out, error, 1);
+}
+
+int helium_infer_module_no_main(struct helium_module *module,
+				struct helium_typed_module **out,
+				char **error)
+{
+	return infer_module_internal(module, out, error, 0);
 }
 
 int helium_check_module(struct helium_module *module, char **error)

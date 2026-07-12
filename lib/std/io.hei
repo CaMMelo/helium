@@ -1,0 +1,4 @@
+module io
+println : fn(str) -> IO<()>
+prints : fn(str) -> IO<()>
+printi : fn(i32) -> IO<()>
