@@ -1,0 +1,12 @@
+// A sampling of every Helium token class.
+if else match type module import loop recur fn return foreign
+x _unused Point Some io main
+0 42 -7 1.0 3.14 -3.14
+true false
+"hello"
+f"x={x}"
++ - * / %
+== != < <= > >=
+&& || !
+= : ; , . -> => | >>=
+( ) [ ] { }

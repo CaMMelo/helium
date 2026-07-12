@@ -1,0 +1,4 @@
+f"value is {a}"
+f"{a}+{b}={a + b}"
+f"nested { {x} }"
+f"empty {} end"
