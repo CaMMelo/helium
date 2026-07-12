@@ -1092,8 +1092,69 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 		return translate_expr(ctx, expr->u.annot.expr, names, args,
 				      count, error);
 
-	case HELIUM_EXPR_BIND:
-	case HELIUM_EXPR_FSTRING:
+	case HELIUM_EXPR_BIND: {
+		struct helium_ir_instr *left;
+		struct helium_ir_instr *right;
+		struct helium_ir_instr *call;
+
+		left = translate_expr(ctx, expr->u.bind.left, names, args,
+				      count, error);
+		if (!left)
+			return NULL;
+		right = translate_expr(ctx, expr->u.bind.right, names, args,
+				       count, error);
+		if (!right)
+			return NULL;
+
+		/* The right side must be a function reference; call it with the
+		 * left value as the argument.
+		 */
+		if (right->kind != HELIUM_IR_INSTR_IDENT) {
+			format_error(error,
+				     "%d:%d: bind right side must be a function",
+				     expr->line, expr->col);
+			helium_ir_instr_free(left);
+			helium_ir_instr_free(right);
+			return NULL;
+		}
+
+		call = helium_ir_instr_call(right->u.ident.name, expr->line,
+					    expr->col);
+		helium_ir_call_add_arg(call, left);
+		call->type = subst_type(expr->inferred_type, names, args, count);
+		helium_ir_instr_free(right);
+		return call;
+	}
+
+	case HELIUM_EXPR_FSTRING: {
+		struct helium_ir_instr *fstring;
+		size_t j;
+
+		fstring = helium_ir_instr_fstring(expr->line, expr->col);
+		for (j = 0; j < expr->u.fstring.part_count; j++) {
+			struct helium_fstring_part *part = expr->u.fstring.parts[j];
+
+			if (part->is_expr) {
+				struct helium_ir_instr *e;
+
+				e = translate_expr(ctx, part->u.expr, names, args,
+						   count, error);
+				if (!e) {
+					helium_ir_instr_free(fstring);
+					return NULL;
+				}
+				helium_ir_fstring_add_expr(fstring, e);
+			} else {
+				helium_ir_fstring_add_text(fstring, part->u.text,
+							   part->line,
+							   part->col);
+			}
+		}
+		fstring->type = subst_type(expr->inferred_type, names, args,
+					   count);
+		return fstring;
+	}
+
 	default:
 		format_error(error,
 			     "%d:%d: expression kind %d not yet supported by monomorphization",

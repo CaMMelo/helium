@@ -271,9 +271,18 @@ def run_helium_test(test: Test) -> Result:
         return Result(test, "PASS", "", proc.stdout, proc.stderr)
 
 
+# Phases that have their own dedicated test binaries/harnesses.  The general
+# harness is for end-to-end compiler/codegen tests, so it skips these.
+_DEDICATED_PHASES = {"lexer", "parser", "type", "mono"}
+
+
 def run_test(test: Test) -> Result:
     if test.skip:
         return Result(test, "SKIP", test.skip)
+
+    if test.phase in _DEDICATED_PHASES:
+        return Result(test, "SKIP",
+                      "covered by dedicated phase harness")
 
     if test.path.suffix == ".test":
         return run_hel_test(test)
