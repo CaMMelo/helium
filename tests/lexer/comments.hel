@@ -1,0 +1,6 @@
+// line comment
+a
+/* block
+   comment */
+b // trailing comment
+/* inline */ c

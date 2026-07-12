@@ -1,0 +1,6 @@
+STRING 1 2 'hello'
+STRING 2 2 'line1
+line2'
+STRING 3 2 'quote: "'
+STRING 4 2 'backslash: \'
+STRING 5 1 ''
