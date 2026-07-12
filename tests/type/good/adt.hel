@@ -1,0 +1,20 @@
+foreign io_unit: IO<()>;
+
+type Point = { x: f64, y: f64 };
+
+type Shape =
+    | Circle { center: Point, radius: f64 }
+    | Rectangle { top_left: Point, bottom_right: Point }
+    ;
+
+s: Shape = Circle{ center: Point{x:0.0, y:0.0}, radius: 1.0 };
+
+area = (s: Shape): f64 {
+    match s {
+        Circle { radius: r } => 3.14 * r * r,
+        Rectangle { top_left: tl, bottom_right: br } =>
+            (br.x - tl.x) * (br.y - tl.y)
+    }
+};
+
+main = io_unit;

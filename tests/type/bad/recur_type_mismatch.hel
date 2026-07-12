@@ -1,0 +1,7 @@
+foreign io_unit: IO<()>;
+
+x = loop (a: i32 = 0) {
+    recur(true)
+};
+
+main = io_unit;

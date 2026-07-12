@@ -1,0 +1,5 @@
+foreign io_unit: IO<()>;
+
+x = recur(1);
+
+main = io_unit;

@@ -1,0 +1,11 @@
+foreign io_unit: IO<()>;
+
+x = {
+    a = 1;
+    b = a + 2;
+    b
+};
+
+empty = {};
+
+main = io_unit;

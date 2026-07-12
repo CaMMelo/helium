@@ -5,10 +5,12 @@ src/libhelium/parser.tab.c
 src/libhelium/parser.tab.h
 
 # Test outputs
-tests/lexer/*.out
-tests/lexer/*.err
-tests/parser/*.out
-tests/parser/*.err
+tests/lexer/**/*.out
+tests/lexer/**/*.err
+tests/parser/**/*.out
+tests/parser/**/*.err
+tests/type/**/*.out
+tests/type/**/*.err
 
 # Python cache
 __pycache__/

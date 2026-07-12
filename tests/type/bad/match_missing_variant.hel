@@ -1,0 +1,16 @@
+foreign io_unit: IO<()>;
+
+type Color =
+    | Red
+    | Green
+    | Blue
+    ;
+
+c: Color = Red;
+
+x = match c {
+    Red => 1,
+    Green => 2
+};
+
+main = io_unit;

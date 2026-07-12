@@ -1,0 +1,7 @@
+foreign io_unit: IO<()>;
+foreign get_value: fn() -> IO<i32>;
+foreign print_int: fn(i32) -> IO<()>;
+
+main = get_value() >>= (v: i32): IO<()> {
+    print_int(v)
+};

@@ -1,0 +1,20 @@
+foreign io_unit: IO<()>;
+
+apply = (f: fn(i32) -> i32, x: i32): i32 {
+    f(x)
+};
+
+make_adder = (x: i32): fn(i32) -> i32 {
+    (y: i32): i32 {
+        x + y
+    }
+};
+
+inc = (n: i32): i32 {
+    n + 1
+};
+
+v = apply(inc, 5);
+w = make_adder(3)(4);
+
+main = io_unit;

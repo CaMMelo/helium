@@ -40,9 +40,17 @@ Implement type checking and inference for Helium.
 
 ## Acceptance criteria
 
-- [ ] All valid programs from the language docs type-check.
-- [ ] Mismatched types, missing variants, wrong arity, and escaping type
+- [x] All valid programs from the language docs type-check.
+- [x] Mismatched types, missing variants, wrong arity, and escaping type
       variables are rejected with clear errors.
-- [ ] `loop`/`recur` argument types match the loop bindings.
-- [ ] `if` branches unify to a common type.
-- [ ] Results are consumable by SPEC-004 (monomorphization).
+- [x] `loop`/`recur` argument types match the loop bindings.
+- [x] `if` branches unify to a common type.
+- [x] Results are consumable by SPEC-004 (monomorphization).
+
+## Notes
+
+- `IO<T>` is treated as the only builtin type so that `main : IO<()>` can be
+  enforced; the runtime/IO implementation is provided by SPEC-005.
+- The standalone `tests/type` suite currently exercises the type checker
+  directly. The general `run_tests.py` harness will invoke it automatically
+  once the compiler driver wires `helium_check_module` into the pipeline.

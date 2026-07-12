@@ -1,0 +1,7 @@
+foreign io_unit: IO<()>;
+
+x = loop (a = 0) {
+    recur(a, 1)
+};
+
+main = io_unit;

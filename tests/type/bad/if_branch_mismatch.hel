@@ -1,0 +1,5 @@
+foreign io_unit: IO<()>;
+
+x = if (true) { 1 } else { 2.0 };
+
+main = io_unit;

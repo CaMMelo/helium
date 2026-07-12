@@ -1,0 +1,6 @@
+foreign io_unit: IO<()>;
+
+f = (a: i32): i32 { a + 1 };
+x = f(true);
+
+main = io_unit;
