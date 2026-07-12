@@ -42,9 +42,20 @@ The lexer must recognize:
    - `=`, `:`, `;`, `,`, `.`, `->`, `=>`, `|`, `>>=`
    - `(`, `)`, `[`, `]`, `{`, `}`, `<`, `>`
 
+## Implementation notes
+
+- The lexer emits f-strings as a sequence of `FSTRING_START`,
+  `FSTRING_PART`, the interpolated expression tokens, and `FSTRING_END`.
+  This lets the parser handle the expression inside the braces.
+- Floating-point literals are accepted with an optional leading `-` sign
+  (e.g. `-3.14`) in addition to the `digits.digits` form, matching the
+  treatment of signed integer literals.
+- Line and column numbers are 1-based and attached to every token for error
+  reporting.
+
 ## Acceptance criteria
 
-- [ ] `tests/lexer/tokens.hel` is tokenized correctly.
-- [ ] Bad input such as unterminated strings or comments produces an error with
+- [x] `tests/lexer/tokens.hel` is tokenized correctly.
+- [x] Bad input such as unterminated strings or comments produces an error with
       line/column information.
 - [ ] The lexer integrates with the parser built in SPEC-002.
