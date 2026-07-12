@@ -16,3 +16,6 @@ tests/type/**/*.err
 __pycache__/
 *.py[cod]
 .worktrees/
+# Compiled library artifacts
+lib/**/*.o
+lib/**/*.so

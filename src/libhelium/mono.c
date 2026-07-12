@@ -372,6 +372,8 @@ static char *request_generic_type(struct mono_ctx *ctx,
 				  size_t count, char **error)
 {
 	struct helium_ir_type *ir_type;
+
+	(void)error;
 	struct helium_type_def *def;
 	char *name;
 	size_t i;
@@ -1311,6 +1313,60 @@ static char *request_function(struct mono_ctx *ctx,
 }
 
 /* -------------------------------------------------------------------------- */
+/* Module function generation                                                 */
+/* -------------------------------------------------------------------------- */
+
+static int generate_all_functions(struct mono_ctx *ctx, char **error)
+{
+	struct helium_ir_function *func;
+	struct helium_ir_block *body_block;
+	struct helium_ir_instr *body_instr;
+	size_t i;
+
+	for (i = 0; i < ctx->typed->module->decl_count; i++) {
+		struct helium_top_decl *decl = ctx->typed->module->decls[i];
+		struct helium_binding *binding;
+		char *name;
+
+		if (decl->kind != HELIUM_DECL_BINDING)
+			continue;
+		binding = decl->u.binding;
+		name = binding->name;
+
+		if (binding->value->kind == HELIUM_EXPR_LAMBDA) {
+			struct helium_expr *lambda = binding->value;
+			char *generated;
+
+			if (lambda->u.lambda.type_param_count > 0)
+				continue;
+			generated = request_function(ctx, name, NULL, 0, error);
+			if (!generated)
+				return -1;
+			free(generated);
+			continue;
+		}
+
+		func = helium_ir_function_new(name,
+					      subst_type(binding->value->
+							 inferred_type,
+							 NULL, NULL, 0),
+					      binding->line, binding->col);
+		body_instr = translate_expr(ctx, binding->value, NULL, NULL, 0,
+					    error);
+		if (!body_instr) {
+			helium_ir_function_free(func);
+			return -1;
+		}
+		body_block = helium_ir_block_new();
+		helium_ir_block_add_instr(body_block, body_instr);
+		helium_ir_function_set_body(func, body_block);
+		helium_ir_program_add_function(ctx->prog, func);
+	}
+
+	return 0;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Main entry generation                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -1360,7 +1416,7 @@ static int generate_main(struct mono_ctx *ctx, char **error)
 /* -------------------------------------------------------------------------- */
 
 struct helium_ir_program *helium_monomorphize(struct helium_typed_module *typed,
-					      char **error)
+				      char **error)
 {
 	struct mono_ctx ctx;
 
@@ -1373,6 +1429,28 @@ struct helium_ir_program *helium_monomorphize(struct helium_typed_module *typed,
 	ctx.prog = helium_ir_program_new();
 
 	if (generate_main(&ctx, error) < 0) {
+		helium_ir_program_free(ctx.prog);
+		return NULL;
+	}
+
+	return ctx.prog;
+}
+
+struct helium_ir_program *helium_monomorphize_module(
+				struct helium_typed_module *typed,
+				char **error)
+{
+	struct mono_ctx ctx;
+
+	if (!typed || !typed->module) {
+		format_error(error, "internal error: null typed module");
+		return NULL;
+	}
+
+	ctx.typed = typed;
+	ctx.prog = helium_ir_program_new();
+
+	if (generate_all_functions(&ctx, error) < 0) {
 		helium_ir_program_free(ctx.prog);
 		return NULL;
 	}

@@ -11,12 +11,15 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ast.h"
 #include "codegen.h"
+#include "ffi.h"
 #include "inference.h"
 #include "ir.h"
+#include "modules.h"
 #include "mono.h"
 #include "parser.h"
 #include "token.h"
@@ -36,6 +39,13 @@ static void *xalloc(size_t size)
 	return p;
 }
 
+static char *xstrdup(const char *s)
+{
+	if (!s)
+		return NULL;
+	return strdup(s);
+}
+
 static void format_error(char **error, const char *fmt, ...)
 {
 	va_list ap;
@@ -53,182 +63,296 @@ static void format_error(char **error, const char *fmt, ...)
 	*error = msg;
 }
 
+static char *replace_extension(const char *path, const char *new_ext)
+{
+	const char *dot = strrchr(path, '.');
+	char *out;
+
+	if (!dot)
+		return xstrdup(new_ext);
+	if (asprintf(&out, "%.*s%s", (int)(dot - path), path, new_ext) < 0)
+		abort();
+	return out;
+}
+
+static char *path_dirname(const char *path)
+{
+	const char *slash = strrchr(path, '/');
+
+	if (!slash)
+		return xstrdup(".");
+	if (slash == path)
+		return xstrdup("/");
+	return strndup(path, slash - path);
+}
+
+static char *path_join(const char *a, const char *b)
+{
+	char *out;
+	size_t len_a = strlen(a);
+	int need_sep = len_a > 0 && a[len_a - 1] != '/';
+
+	if (asprintf(&out, "%s%s%s", a, need_sep ? "/" : "", b) < 0)
+		abort();
+	return out;
+}
+
+static int file_exists(const char *path)
+{
+	struct stat st;
+
+	return stat(path, &st) == 0;
+}
+
+static int file_mtime(const char *path, time_t *out)
+{
+	struct stat st;
+
+	if (stat(path, &st) != 0)
+		return -1;
+	*out = st.st_mtime;
+	return 0;
+}
+
+static int module_needs_compile(const char *source_path,
+				const char *object_path,
+				const char *iface_path)
+{
+	time_t src_mtime;
+	time_t obj_mtime;
+	time_t iface_mtime;
+
+	if (!file_exists(object_path) || !file_exists(iface_path))
+		return 1;
+	if (file_mtime(source_path, &src_mtime) < 0)
+		return 1;
+	if (file_mtime(object_path, &obj_mtime) < 0)
+		return 1;
+	if (file_mtime(iface_path, &iface_mtime) < 0)
+		return 1;
+	return src_mtime > obj_mtime || src_mtime > iface_mtime;
+}
+
 /* -------------------------------------------------------------------------- */
-/* std.io bootstrap stub                                                      */
+/* Parsing                                                                    */
 /* -------------------------------------------------------------------------- */
 
-static struct helium_type *make_io_unit_type(void)
+static int parse_source(const char *source_path, struct helium_module **module,
+			char **error)
 {
-	struct helium_type *io;
+	FILE *f;
+	struct helium_token *tokens;
+	size_t count;
+	struct helium_module *m;
 
-	io = helium_type_named("IO", 0, 0);
-	helium_type_add_arg(io, helium_type_named("()", 0, 0));
-	return io;
+	f = fopen(source_path, "r");
+	if (!f) {
+		format_error(error, "%s: %m", source_path);
+		return -1;
+	}
+
+	if (helium_lex_file(f, &tokens, &count, error) < 0) {
+		fclose(f);
+		return -1;
+	}
+	fclose(f);
+
+	m = helium_parse_tokens(tokens, count, source_path, error);
+	helium_tokens_free(tokens, count);
+	if (!m)
+		return -1;
+
+	*module = m;
+	return 0;
 }
 
-static struct helium_top_decl *make_io_println_foreign(void)
+/* -------------------------------------------------------------------------- */
+/* Module compilation                                                         */
+/* -------------------------------------------------------------------------- */
+
+static int compile_module_source(const char *source_path,
+				 struct helium_import_context *parent_ctx,
+				 struct helium_module_interface **iface_out,
+				 char **error);
+
+static int collect_imports(struct helium_module *module,
+			   const char *source_path,
+			   struct helium_import_context *ctx,
+			   char **error)
 {
-	struct helium_type *fn_type;
-	struct helium_type *str_type;
+	struct helium_search_path *sp;
+	size_t i;
+	int rc = -1;
 
-	str_type = helium_type_named("str", 0, 0);
-	fn_type = helium_type_fn(0, 0);
-	helium_type_add_param(fn_type, str_type);
-	helium_type_set_ret(fn_type, make_io_unit_type());
-	return helium_decl_foreign("io_println", fn_type, 0, 0);
-}
+	sp = helium_search_path_for_project(source_path, error);
+	if (!sp)
+		return -1;
 
-static struct helium_top_decl *make_io_prints_foreign(void)
-{
-	struct helium_type *fn_type;
-	struct helium_type *str_type;
+	for (i = 0; i < module->decl_count; i++) {
+		struct helium_top_decl *decl = module->decls[i];
+		struct helium_import_info *info;
+		char *source;
+		char *mod_name;
+		char *object;
+		char *iface;
 
-	str_type = helium_type_named("str", 0, 0);
-	fn_type = helium_type_fn(0, 0);
-	helium_type_add_param(fn_type, str_type);
-	helium_type_set_ret(fn_type, make_io_unit_type());
-	return helium_decl_foreign("io_prints", fn_type, 0, 0);
-}
+		if (decl->kind != HELIUM_DECL_IMPORT)
+			continue;
 
-static struct helium_top_decl *make_io_printi_foreign(void)
-{
-	struct helium_type *fn_type;
+		if (helium_module_resolve(decl->u.import->path, sp, &source,
+					  &mod_name, error) < 0)
+			goto out;
 
-	fn_type = helium_type_fn(0, 0);
-	helium_type_add_param(fn_type, helium_type_named("i32", 0, 0));
-	helium_type_set_ret(fn_type, make_io_unit_type());
-	return helium_decl_foreign("io_printi", fn_type, 0, 0);
-}
+		object = replace_extension(source, ".o");
+		iface = replace_extension(source, ".hei");
 
-static int expr_is_io_field(struct helium_expr *expr, const char **field)
-{
-	if (!expr || expr->kind != HELIUM_EXPR_FIELD)
-		return 0;
-	if (!expr->u.field.object ||
-	    expr->u.field.object->kind != HELIUM_EXPR_IDENT)
-		return 0;
-	if (strcmp(expr->u.field.object->u.ident.name, "io") != 0)
-		return 0;
-	*field = expr->u.field.name;
-	return 1;
-}
+		info = helium_import_context_add(ctx, decl->u.import->path,
+						 mod_name, source, object, iface);
+		free(mod_name);
 
-static void rewrite_io_field(struct helium_expr *expr)
-{
-	const char *field;
-	char *name;
+		if (!module_needs_compile(source, object, iface)) {
+			info->iface = helium_module_interface_load(iface, error);
+			if (!info->iface)
+				goto out;
+		} else {
+			struct helium_module_interface *dep_iface;
 
-	if (!expr)
-		return;
-
-	if (expr_is_io_field(expr, &field)) {
-		name = xalloc(strlen(field) + 4);
-		sprintf(name, "io_%s", field);
-		free(expr->u.field.object);
-		free(expr->u.field.name);
-		expr->kind = HELIUM_EXPR_IDENT;
-		expr->u.ident.name = name;
-		return;
-	}
-
-	switch (expr->kind) {
-	case HELIUM_EXPR_BINARY:
-		rewrite_io_field(expr->u.binary.left);
-		rewrite_io_field(expr->u.binary.right);
-		break;
-	case HELIUM_EXPR_UNARY:
-		rewrite_io_field(expr->u.unary.operand);
-		break;
-	case HELIUM_EXPR_CALL: {
-		size_t i;
-
-		rewrite_io_field(expr->u.call.func);
-		for (i = 0; i < expr->u.call.arg_count; i++)
-			rewrite_io_field(expr->u.call.args[i]);
-		break;
-	}
-	case HELIUM_EXPR_BLOCK: {
-		size_t i;
-
-		for (i = 0; i < expr->u.block.binding_count; i++)
-			rewrite_io_field(expr->u.block.bindings[i]->value);
-		for (i = 0; i < expr->u.block.expr_count; i++)
-			rewrite_io_field(expr->u.block.exprs[i]);
-		break;
-	}
-	case HELIUM_EXPR_IF:
-		rewrite_io_field(expr->u.if_expr.cond);
-		rewrite_io_field(expr->u.if_expr.then_branch);
-		rewrite_io_field(expr->u.if_expr.else_branch);
-		break;
-	case HELIUM_EXPR_MATCH: {
-		size_t i;
-
-		rewrite_io_field(expr->u.match.value);
-		for (i = 0; i < expr->u.match.arm_count; i++)
-			rewrite_io_field(expr->u.match.arms[i]->expr);
-		break;
-	}
-	case HELIUM_EXPR_LOOP: {
-		size_t i;
-
-		for (i = 0; i < expr->u.loop.binding_count; i++)
-			rewrite_io_field(expr->u.loop.bindings[i]->init);
-		rewrite_io_field(expr->u.loop.body);
-		break;
-	}
-	case HELIUM_EXPR_RECUR: {
-		size_t i;
-
-		for (i = 0; i < expr->u.recur.arg_count; i++)
-			rewrite_io_field(expr->u.recur.args[i]);
-		break;
-	}
-	case HELIUM_EXPR_LAMBDA:
-		rewrite_io_field(expr->u.lambda.body);
-		break;
-	case HELIUM_EXPR_RECORD_LIT: {
-		size_t i;
-
-		for (i = 0; i < expr->u.record_lit.field_count; i++)
-			rewrite_io_field(expr->u.record_lit.fields[i]->value);
-		break;
-	}
-	case HELIUM_EXPR_ARRAY_LIT: {
-		size_t i;
-
-		for (i = 0; i < expr->u.array_lit.item_count; i++)
-			rewrite_io_field(expr->u.array_lit.items[i]);
-		break;
-	}
-	case HELIUM_EXPR_FIELD:
-		rewrite_io_field(expr->u.field.object);
-		break;
-	case HELIUM_EXPR_ANNOT:
-		rewrite_io_field(expr->u.annot.expr);
-		break;
-	case HELIUM_EXPR_BIND:
-		rewrite_io_field(expr->u.bind.left);
-		rewrite_io_field(expr->u.bind.right);
-		break;
-	case HELIUM_EXPR_RETURN:
-		rewrite_io_field(expr->u.ret.expr);
-		break;
-	case HELIUM_EXPR_FSTRING: {
-		size_t i;
-
-		for (i = 0; i < expr->u.fstring.part_count; i++) {
-			struct helium_fstring_part *p = expr->u.fstring.parts[i];
-
-			if (p->is_expr)
-				rewrite_io_field(p->u.expr);
+			if (compile_module_source(source, ctx, &dep_iface,
+						  error) < 0)
+				goto out;
+			info->iface = dep_iface;
 		}
-		break;
+
+		free(source);
+		free(object);
+		free(iface);
 	}
-	default:
-		break;
-	}
+
+	rc = 0;
+out:
+	helium_search_path_free(sp);
+	return rc;
 }
+
+static int compile_module_source(const char *source_path,
+				 struct helium_import_context *parent_ctx,
+				 struct helium_module_interface **iface_out,
+				 char **error)
+{
+	struct helium_module *module = NULL;
+	struct helium_typed_module *typed = NULL;
+	struct helium_ir_program *prog = NULL;
+	struct helium_import_context *ctx = NULL;
+	struct helium_module_interface *iface = NULL;
+	char *object_path;
+	char *interface_path;
+	char *module_name;
+	int rc = -1;
+
+	if (iface_out)
+		*iface_out = NULL;
+
+	if (parse_source(source_path, &module, error) < 0)
+		return -1;
+
+	ctx = helium_import_context_new();
+	if (collect_imports(module, source_path, ctx, error) < 0)
+		goto out;
+
+	module_name = module->name ? xstrdup(module->name) :
+			     replace_extension(source_path, "");
+	{
+		char *base = strrchr(module_name, '/');
+		char *tmp;
+
+		if (base) {
+			tmp = xstrdup(base + 1);
+			free(module_name);
+			module_name = tmp;
+		}
+	}
+
+	helium_rewrite_qualified_access(module, ctx);
+	helium_rewrite_qualified_access(module, parent_ctx);
+
+	if (helium_infer_module_no_main(module, &typed, error) < 0)
+		goto out;
+
+	object_path = replace_extension(source_path, ".o");
+	interface_path = replace_extension(source_path, ".hei");
+
+	if (helium_module_interface_emit(module, typed->env, interface_path,
+					 error) < 0) {
+		free(object_path);
+		free(interface_path);
+		free(module_name);
+		goto out;
+	}
+
+	iface = helium_module_interface_load(interface_path, error);
+	if (!iface) {
+		free(object_path);
+		free(interface_path);
+		free(module_name);
+		goto out;
+	}
+	iface->source_path = xstrdup(source_path);
+	iface->object_path = object_path;
+
+	helium_typed_module_free(typed);
+	typed = NULL;
+
+	helium_prefix_module_names(module, module_name);
+
+	if (helium_infer_module_no_main(module, &typed, error) < 0) {
+		free(object_path);
+		free(interface_path);
+		free(module_name);
+		goto out;
+	}
+
+	prog = helium_monomorphize_module(typed, error);
+	if (!prog) {
+		free(object_path);
+		free(interface_path);
+		free(module_name);
+		goto out;
+	}
+
+	if (helium_codegen_program(prog, object_path, error) < 0) {
+		free(object_path);
+		free(interface_path);
+		free(module_name);
+		goto out;
+	}
+
+	if (iface_out) {
+		*iface_out = iface;
+		iface = NULL;
+	} else {
+		helium_module_interface_free(iface);
+	}
+	iface = NULL;
+
+	free(interface_path);
+	free(module_name);
+	rc = 0;
+out:
+	if (iface)
+		helium_module_interface_free(iface);
+	if (prog)
+		helium_ir_program_free(prog);
+	if (typed)
+		helium_typed_module_free(typed);
+	if (module)
+		helium_module_free(module);
+	helium_import_context_free(ctx);
+	return rc;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inject imported declarations into the entry module                         */
+/* -------------------------------------------------------------------------- */
 
 static void module_insert_decl_at(struct helium_module *module,
 				  struct helium_top_decl *decl, size_t idx)
@@ -252,57 +376,52 @@ static void module_insert_decl_at(struct helium_module *module,
 	module->decl_count++;
 }
 
-static void rewrite_std_io_fields(struct helium_module *module)
+static void inject_imported_decls(struct helium_module *module,
+				  struct helium_import_context *ctx)
 {
 	size_t i;
+	size_t j;
 
-	for (i = 0; i < module->decl_count; i++) {
-		struct helium_top_decl *decl = module->decls[i];
+	for (i = 0; i < ctx->count; i++) {
+		struct helium_import_info *info = ctx->imports[i];
+		struct helium_module_interface *iface = info->iface;
 
-		if (decl->kind == HELIUM_DECL_BINDING)
-			rewrite_io_field(decl->u.binding->value);
-	}
-}
+		if (!iface)
+			continue;
+		for (j = 0; j < iface->export_count; j++) {
+			struct helium_interface_export *exp = iface->exports[j];
+			char *mangled;
+			struct helium_top_decl *decl;
 
-static void handle_std_io_import(struct helium_module *module)
-{
-	size_t i;
-	int has_import = 0;
-	struct helium_top_decl *foreigns[3];
-
-	for (i = 0; i < module->decl_count; i++) {
-		struct helium_top_decl *decl = module->decls[i];
-
-		if (decl->kind == HELIUM_DECL_IMPORT &&
-		    strcmp(decl->u.import->path, "std.io") == 0) {
-			has_import = 1;
-			break;
+			if (asprintf(&mangled, "%s_%s", info->prefix,
+				     exp->name) < 0)
+				abort();
+			decl = helium_decl_foreign(mangled,
+						   helium_type_copy(exp->type),
+						   0, 0);
+			free(mangled);
+			module_insert_decl_at(module, decl, 0);
 		}
 	}
-
-	if (!has_import)
-		return;
-
-	rewrite_std_io_fields(module);
-
-	foreigns[0] = make_io_println_foreign();
-	foreigns[1] = make_io_prints_foreign();
-	foreigns[2] = make_io_printi_foreign();
-	for (i = 0; i < 3; i++)
-		module_insert_decl_at(module, foreigns[i], 0);
 }
 
 /* -------------------------------------------------------------------------- */
-/* Compile pipeline                                                           */
+/* Linking                                                                    */
 /* -------------------------------------------------------------------------- */
 
 static int run_linker(const char *obj_path, const char *output_path,
-		      const char *extra_libs, char **error)
+		      const char *extra_libs,
+		      struct helium_import_context *ctx, char **error)
 {
 	char runtime_obj[4096];
 	const char *runtime_src = "src/runtime/helium_runtime.c";
 	pid_t pid;
 	int status;
+	size_t i;
+	char **argv;
+	int argc;
+	int cap;
+	int rc = -1;
 
 	snprintf(runtime_obj, sizeof(runtime_obj), "%s.runtime.o", output_path);
 
@@ -322,61 +441,89 @@ static int run_linker(const char *obj_path, const char *output_path,
 		return -1;
 	}
 
+	cap = 16 + (ctx ? (int)ctx->object_count : 0);
+	argv = xalloc(cap * sizeof(*argv));
+	argc = 0;
+	argv[argc++] = xstrdup("cc");
+	argv[argc++] = xstrdup("-no-pie");
+	argv[argc++] = xstrdup("-O2");
+	argv[argc++] = xstrdup("-g");
+	argv[argc++] = xstrdup(obj_path);
+	argv[argc++] = xstrdup(runtime_obj);
+
+	if (ctx) {
+		for (i = 0; i < ctx->object_count; i++)
+			argv[argc++] = xstrdup(ctx->object_paths[i]);
+	}
+
+	argv[argc++] = xstrdup("-o");
+	argv[argc++] = xstrdup(output_path);
+
+	if (extra_libs && extra_libs[0]) {
+		char *libs = xstrdup(extra_libs);
+		char *tok = strtok(libs, " \t");
+
+		while (tok) {
+			if (argc + 1 >= cap) {
+				cap *= 2;
+				argv = realloc(argv, cap * sizeof(*argv));
+				if (!argv)
+					abort();
+			}
+			argv[argc++] = xstrdup(tok);
+			tok = strtok(NULL, " \t");
+		}
+		free(libs);
+	}
+	argv[argc] = NULL;
+
 	pid = fork();
 	if (pid < 0) {
 		format_error(error, "fork failed");
-		return -1;
+		goto out;
 	}
 	if (pid == 0) {
-		if (extra_libs && extra_libs[0])
-			execlp("cc", "cc", "-no-pie", "-O2", "-g", obj_path,
-			       runtime_obj, "-o", output_path, extra_libs,
-			       (char *)NULL);
-		else
-			execlp("cc", "cc", "-no-pie", "-O2", "-g", obj_path,
-			       runtime_obj, "-o", output_path, (char *)NULL);
+		execvp("cc", argv);
 		_exit(127);
 	}
 	waitpid(pid, &status, 0);
 	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
 		format_error(error, "linking failed");
-		return -1;
+		goto out;
 	}
-	return 0;
+	rc = 0;
+
+out:
+	for (i = 0; i < (size_t)argc; i++)
+		free(argv[i]);
+	free(argv);
+	return rc;
 }
 
-static int validate_imports(struct helium_module *module, char **error)
-{
-	size_t i;
+/* -------------------------------------------------------------------------- */
+/* Entry-point compilation                                                    */
+/* -------------------------------------------------------------------------- */
 
-	for (i = 0; i < module->decl_count; i++) {
-		struct helium_top_decl *decl = module->decls[i];
-		const char *path;
-
-		if (decl->kind != HELIUM_DECL_IMPORT)
-			continue;
-		path = decl->u.import->path;
-		if (strcmp(path, "std.io") != 0) {
-			format_error(error, "module not found: %s", path);
-			return -1;
-		}
-	}
-	return 0;
-}
-
-static int compile_module(struct helium_module *module,
-			  const char *output_path,
-			  const char *extra_libs, char **error)
+static int compile_program(struct helium_module *module,
+			   const char *source_path,
+			   const char *output_path,
+			   const char *extra_libs, char **error)
 {
 	struct helium_typed_module *typed = NULL;
 	struct helium_ir_program *prog = NULL;
+	struct helium_import_context *ctx = NULL;
 	char *obj_path = NULL;
+	char *heliumfile;
+	char *link_flags = NULL;
+	char *combined_libs = NULL;
 	int rc = -1;
 
-	if (validate_imports(module, error) < 0)
+	ctx = helium_import_context_new();
+	if (collect_imports(module, source_path, ctx, error) < 0)
 		goto out;
 
-	handle_std_io_import(module);
+	helium_rewrite_qualified_access(module, ctx);
+	inject_imported_decls(module, ctx);
 
 	if (helium_infer_module(module, &typed, error) < 0)
 		goto out;
@@ -391,11 +538,31 @@ static int compile_module(struct helium_module *module,
 	if (helium_codegen_program(prog, obj_path, error) < 0)
 		goto out;
 
-	if (run_linker(obj_path, output_path, extra_libs, error) < 0)
+	{
+		char *root = path_dirname(source_path);
+
+		heliumfile = path_join(root, "Heliumfile");
+		link_flags = helium_ffi_read_link_flags(heliumfile);
+		free(heliumfile);
+		free(root);
+	}
+
+	if (extra_libs && extra_libs[0] && link_flags && link_flags[0]) {
+		if (asprintf(&combined_libs, "%s %s", extra_libs, link_flags) < 0)
+			abort();
+	} else if (extra_libs && extra_libs[0]) {
+		combined_libs = xstrdup(extra_libs);
+	} else if (link_flags && link_flags[0]) {
+		combined_libs = xstrdup(link_flags);
+	}
+
+	if (run_linker(obj_path, output_path, combined_libs, ctx, error) < 0)
 		goto out;
 
 	rc = 0;
 out:
+	free(combined_libs);
+	free(link_flags);
 	if (obj_path) {
 		/* unlink(obj_path); */
 		free(obj_path);
@@ -404,36 +571,20 @@ out:
 		helium_ir_program_free(prog);
 	if (typed)
 		helium_typed_module_free(typed);
+	helium_import_context_free(ctx);
 	return rc;
 }
 
 int helium_compile_file(const char *source_path, const char *output_path,
 			const char *extra_libs, char **error)
 {
-	FILE *f;
-	struct helium_token *tokens;
-	size_t count;
 	struct helium_module *module;
 	int rc;
 
-	f = fopen(source_path, "r");
-	if (!f) {
-		format_error(error, "%s: %m", source_path);
-		return -1;
-	}
-
-	if (helium_lex_file(f, &tokens, &count, error) < 0) {
-		fclose(f);
-		return -1;
-	}
-	fclose(f);
-
-	module = helium_parse_tokens(tokens, count, source_path, error);
-	helium_tokens_free(tokens, count);
-	if (!module)
+	if (parse_source(source_path, &module, error) < 0)
 		return -1;
 
-	rc = compile_module(module, output_path, extra_libs, error);
+	rc = compile_program(module, source_path, output_path, extra_libs, error);
 	helium_module_free(module);
 	return rc;
 }
