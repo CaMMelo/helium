@@ -104,5 +104,8 @@ SPEC-005  ->  SPEC-006
 ## Current state
 
 - Foundation: in review.
+- SPEC-005 reference-counting runtime: implemented in
+  `src/runtime/helium_runtime.h/.c` with unit tests under `tests/runtime/`.
+  Pending integration with SPEC-006.
 - Front end, core compilation, modules, package manager, and testing: ready to
   be assigned once this roadmap and the specs are approved.
