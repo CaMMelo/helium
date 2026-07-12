@@ -1,0 +1,5 @@
+// @name bad_lambda
+// @phase parser
+// @expect error
+
+f = (x: i32): i32;

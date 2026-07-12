@@ -1,0 +1,6 @@
+// @name fstring
+// @phase parser
+// @expect success
+
+a = 42;
+m = f"value is {a} and twice is {a * 2}"

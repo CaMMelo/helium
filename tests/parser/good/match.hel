@@ -1,0 +1,23 @@
+// @name match
+// @phase parser
+// @expect success
+
+type Option<T> =
+    | None
+    | Some<T>
+    ;
+
+fib = (n: i32): i32 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => fib(n - 1) + fib(n - 2)
+    }
+};
+
+show = (o: Option<i32>): str {
+    match o {
+        None => "none",
+        Some => "some"
+    }
+}

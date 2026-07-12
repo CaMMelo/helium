@@ -1,0 +1,10 @@
+// @name literals
+// @phase parser
+// @expect success
+
+i = 0
+j = -42
+f = 1.5
+b = true
+s = "hello"
+u = ()

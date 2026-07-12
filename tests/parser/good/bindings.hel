@@ -1,0 +1,7 @@
+// @name bindings
+// @phase parser
+// @expect success
+
+x = 42
+y: i32 = 7
+z: f64 = 3.14

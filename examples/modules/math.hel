@@ -3,5 +3,5 @@ module math;
 pi: f64 = 3.14159;
 
 area = (r: f64): f64 {
-    pi * r * r;
+    pi * r * r
 }

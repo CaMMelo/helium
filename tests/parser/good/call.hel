@@ -1,0 +1,12 @@
+// @name call
+// @phase parser
+// @expect success
+
+noop = () : () { () };
+
+greet = (name: str): str { name };
+
+main = () : IO<()> {
+    noop();
+    greet("world")
+}

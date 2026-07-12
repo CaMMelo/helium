@@ -1,0 +1,13 @@
+// @name block
+// @phase parser
+// @expect success
+
+empty = {};
+with_binding = {
+    a = 1;
+    a
+};
+trailing = {
+    a = 1;
+    a
+}

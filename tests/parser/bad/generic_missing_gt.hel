@@ -1,0 +1,5 @@
+// @name generic_missing_gt
+// @phase parser
+// @expect error
+
+type Option<T = | None;

@@ -1,0 +1,9 @@
+// @name field_access
+// @phase parser
+// @expect success
+
+type Point = { x: f64, y: f64 };
+
+p = Point{ x: 1.0, y: 2.0 };
+r = p.x
+d = p.x + p.y

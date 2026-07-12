@@ -1,0 +1,5 @@
+// @name return_empty
+// @phase parser
+// @expect error
+
+f = () : i32 { return; }

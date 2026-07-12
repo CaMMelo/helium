@@ -23,5 +23,5 @@ fib = (n: i32): i32 {
 };
 
 main = () : IO<()> {
-    io.println(f"fib(10) = {fib(10)}");
+    io.println(f"fib(10) = {fib(10)}")
 }

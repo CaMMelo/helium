@@ -1,0 +1,5 @@
+// @name foreign_bad
+// @phase parser
+// @expect error
+
+foreign x;

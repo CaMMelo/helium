@@ -1,0 +1,13 @@
+// @name generic_type
+// @phase parser
+// @expect success
+
+type Option<T> =
+    | None
+    | Some<T>
+    ;
+
+type Either<L, R> =
+    | Left<L>
+    | Right<R>
+    ;

@@ -1,0 +1,5 @@
+// @name unexpected_char
+// @phase parser
+// @expect error
+
+x = @;

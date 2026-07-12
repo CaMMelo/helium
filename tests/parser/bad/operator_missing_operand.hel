@@ -1,0 +1,5 @@
+// @name operator_missing_operand
+// @phase parser
+// @expect error
+
+x = 1 +;

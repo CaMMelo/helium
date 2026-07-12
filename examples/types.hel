@@ -26,5 +26,5 @@ p = Point{ x: 1.0, y: 2.0 };
 l: Option<Option<i32>> = None;
 
 main = () : IO<()> {
-    io.println("types ok");
+    io.println("types ok")
 }

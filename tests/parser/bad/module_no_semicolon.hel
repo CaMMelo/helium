@@ -1,0 +1,5 @@
+// @name module_no_semicolon
+// @phase parser
+// @expect error
+
+module foo

@@ -1,0 +1,13 @@
+// @name lambda
+// @phase parser
+// @expect success
+
+inc = (n: i32): i32 { n + 1 };
+
+make_adder = (x: i32): fn(i32) -> i32 {
+    (y: i32): i32 { x + y }
+};
+
+identity = <T>(x: T): T { x };
+
+anon = () : i32 { (() : i32 { 42 })() }

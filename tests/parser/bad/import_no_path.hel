@@ -1,0 +1,5 @@
+// @name import_no_path
+// @phase parser
+// @expect error
+
+import;

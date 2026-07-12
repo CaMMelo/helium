@@ -1,0 +1,4 @@
+// @name empty_module
+// @phase parser
+// @expect success
+

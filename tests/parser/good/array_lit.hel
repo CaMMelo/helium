@@ -1,0 +1,7 @@
+// @name array_lit
+// @phase parser
+// @expect success
+
+a = [1, 2, 3];
+b: [i32; 0] = [];
+c = [1 + 2, 3 * 4]
