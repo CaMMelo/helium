@@ -1,5 +1,5 @@
 # @name hel_init
 # @phase pm
 # @expect success
-# @command build/bin/hel init pm_smoke_project
+# @command bash -c 'tmp=tests/pm/_tmp_init_test; rm -rf "$tmp"; mkdir -p "$tmp"; build/bin/hel init "$tmp/pkg" >"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; rm -rf "$tmp"; exit $rc'
 # @match Created project|bootstrap
