@@ -1,0 +1,9 @@
+// @name operators
+// @phase parser
+// @expect success
+
+a = 1 + 2 * 3 - 4 / 5 % 6
+b = a == 1 || a != 2 && a < 3 && a > 0 && a <= 1 && a >= 0
+p = -b
+q = !b
+bind = io.read() >>= (s: str) { io.println(s) }

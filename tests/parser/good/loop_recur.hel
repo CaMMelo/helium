@@ -1,4 +1,6 @@
-import std.io
+// @name loop_recur
+// @phase parser
+// @expect success
 
 sum_loop = (n: i32): i32 {
     loop (acc = 0, i: i32 = 0) {
@@ -10,6 +12,8 @@ sum_loop = (n: i32): i32 {
     }
 };
 
-main = () : IO<()> {
-    io.println(f"sum_loop(10) = {sum_loop(10)}")
+forever = () : () {
+    loop () {
+        recur()
+    }
 }

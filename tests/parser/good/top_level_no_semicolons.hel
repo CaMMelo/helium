@@ -1,0 +1,6 @@
+// @name top_level_no_semicolons
+// @phase parser
+// @expect success
+
+a = 1
+b: i32 = 2

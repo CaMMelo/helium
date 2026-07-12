@@ -1,0 +1,9 @@
+// @name recur_no_paren
+// @phase parser
+// @expect error
+
+f = () : i32 {
+    loop () {
+        recur 1
+    }
+}

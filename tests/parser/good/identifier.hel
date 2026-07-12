@@ -1,0 +1,5 @@
+// @name identifier
+// @phase parser
+// @expect success
+
+x = y

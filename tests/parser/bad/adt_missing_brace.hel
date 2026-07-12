@@ -1,0 +1,5 @@
+// @name adt_missing_brace
+// @phase parser
+// @expect error
+
+type T = | C { x: i32 ;

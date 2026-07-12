@@ -1,0 +1,6 @@
+// @name unbalanced_brace
+// @phase parser
+// @expect error
+
+x = {
+    a = 1;

@@ -1,0 +1,9 @@
+// @name module
+// @phase parser
+// @expect success
+
+module Test;
+
+import std.io
+
+x: i32 = 1

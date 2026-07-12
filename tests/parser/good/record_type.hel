@@ -1,0 +1,7 @@
+// @name record_type
+// @phase parser
+// @expect success
+
+type Point = { x: f64, y: f64 };
+
+type Empty = {}

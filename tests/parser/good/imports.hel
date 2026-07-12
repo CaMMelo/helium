@@ -1,0 +1,7 @@
+// @name imports
+// @phase parser
+// @expect success
+
+import std.io
+import math
+import foo.bar.baz

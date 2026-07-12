@@ -1,0 +1,9 @@
+// @name bad_pattern_field
+// @phase parser
+// @expect error
+
+type Option<T> = | None | Some<T>;
+
+x = match None {
+    Some { value } => 0
+};

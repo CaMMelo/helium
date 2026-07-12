@@ -1,0 +1,5 @@
+// @name malformed_type
+// @phase parser
+// @expect error
+
+type = { x: i32 };

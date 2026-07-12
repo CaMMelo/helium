@@ -1,10 +1,14 @@
 # Generated artifacts
 /build/
 src/libhelium/lexer.c
+src/libhelium/parser.tab.c
+src/libhelium/parser.tab.h
 
 # Test outputs
 tests/lexer/*.out
 tests/lexer/*.err
+tests/parser/*.out
+tests/parser/*.err
 
 # Python cache
 __pycache__/

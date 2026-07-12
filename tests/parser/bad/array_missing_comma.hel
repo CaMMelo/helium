@@ -1,0 +1,5 @@
+// @name array_missing_comma
+// @phase parser
+// @expect error
+
+a = [1 2];

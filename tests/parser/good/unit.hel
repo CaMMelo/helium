@@ -1,0 +1,6 @@
+// @name unit
+// @phase parser
+// @expect success
+
+x = ();
+f = () : () { () }

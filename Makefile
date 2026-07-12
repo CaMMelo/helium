@@ -9,6 +9,7 @@ LLVM_CFLAGS := $(shell llvm-config --cflags 2>/dev/null)
 LLVM_LIBS := $(shell llvm-config --libs --ldflags --system-libs 2>/dev/null)
 
 LEX := flex
+YACC := bison
 
 BUILD_DIR := build
 SRC_DIR := src
@@ -19,12 +20,15 @@ HEL_DIR := $(SRC_DIR)/hel
 RUNTIME_DIR := $(SRC_DIR)/runtime
 
 LEXER_C := $(LIBHELIUM_DIR)/lexer.c
-LIBHELIUM_SRCS := $(filter-out $(LEXER_C),$(wildcard $(LIBHELIUM_DIR)/*.c))
+PARSER_C := $(LIBHELIUM_DIR)/parser.tab.c
+PARSER_H := $(LIBHELIUM_DIR)/parser.tab.h
+LIBHELIUM_SRCS := $(filter-out $(LEXER_C) $(PARSER_C),$(wildcard $(LIBHELIUM_DIR)/*.c))
 OBJ_DIR := $(BUILD_DIR)/obj
 BIN_DIR := $(BUILD_DIR)/bin
 
 LIBHELIUM_OBJS := $(patsubst $(LIBHELIUM_DIR)/%.c,$(OBJ_DIR)/libhelium/%.o,$(LIBHELIUM_SRCS))
 LIBHELIUM_OBJS += $(OBJ_DIR)/libhelium/lexer.o
+LIBHELIUM_OBJS += $(OBJ_DIR)/libhelium/parser.tab.o
 
 HELIUM_SRCS := $(wildcard $(HELIUM_DIR)/*.c)
 HELIUM_OBJS := $(patsubst $(HELIUM_DIR)/%.c,$(OBJ_DIR)/helium/%.o,$(HELIUM_SRCS))
@@ -38,6 +42,10 @@ RUNTIME_OBJS := $(patsubst $(RUNTIME_DIR)/%.c,$(OBJ_DIR)/runtime/%.o,$(RUNTIME_S
 TEST_LEXER_DIR := tests/lexer
 TEST_LEXER_BIN := $(BUILD_DIR)/lexer_test
 TEST_LEXER_SRC := $(TEST_LEXER_DIR)/lexer_test.c
+
+TEST_PARSER_DIR := tests/parser
+TEST_PARSER_BIN := $(BUILD_DIR)/parser_test
+TEST_PARSER_SRC := $(TEST_PARSER_DIR)/parser_test.c
 
 TEST_RUNNER := ./tests/run_tests.py
 
@@ -73,8 +81,16 @@ $(OBJ_DIR)/libhelium/lexer.o: $(LEXER_C)
 $(LEXER_C): $(LIBHELIUM_DIR)/lexer.l
 	$(LEX) -o $@ $<
 
+# Generated parser object
+$(OBJ_DIR)/libhelium/parser.tab.o: $(PARSER_C)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LLVM_CFLAGS) -I$(LIBHELIUM_DIR) -c $< -o $@
+
+$(PARSER_C) $(PARSER_H): $(LIBHELIUM_DIR)/parser.y
+	$(YACC) -d -o $(PARSER_C) $<
+
 # Generic pattern rules
-$(OBJ_DIR)/libhelium/%.o: $(LIBHELIUM_DIR)/%.c
+$(OBJ_DIR)/libhelium/%.o: $(LIBHELIUM_DIR)/%.c $(PARSER_H)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LLVM_CFLAGS) -I$(LIBHELIUM_DIR) -c $< -o $@
 
@@ -95,12 +111,20 @@ $(TEST_LEXER_BIN): $(TEST_LEXER_SRC) $(BUILD_DIR)/libhelium.a
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(LIBHELIUM_DIR) -o $@ $< $(BUILD_DIR)/libhelium.a
 
-test: all $(TEST_LEXER_BIN)
+# Parser test harness
+$(TEST_PARSER_BIN): $(TEST_PARSER_SRC) $(BUILD_DIR)/libhelium.a
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(LIBHELIUM_DIR) -o $@ $< $(BUILD_DIR)/libhelium.a
+
+test: all $(TEST_LEXER_BIN) $(TEST_PARSER_BIN)
 	@echo "Running lexer tests..."
 	@cd $(TEST_LEXER_DIR) && ./run_tests.sh $(abspath $(TEST_LEXER_BIN))
+	@echo "Running parser tests..."
+	@cd $(TEST_PARSER_DIR) && ./run_tests.sh $(abspath $(TEST_PARSER_BIN))
 	@echo "Running general test harness..."
 	$(TEST_RUNNER)
 
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEXER_C)
+	rm -f $(PARSER_C) $(PARSER_H)

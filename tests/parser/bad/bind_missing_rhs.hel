@@ -1,0 +1,5 @@
+// @name bind_missing_rhs
+// @phase parser
+// @expect error
+
+x = 1 >>=;

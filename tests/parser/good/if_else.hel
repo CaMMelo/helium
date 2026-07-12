@@ -1,0 +1,21 @@
+// @name if_else
+// @phase parser
+// @expect success
+
+max = (a: i32, b: i32): i32 {
+    if (a > b) {
+        a
+    } else {
+        b
+    }
+};
+
+nested_if = (x: i32): i32 {
+    if (x == 0) {
+        0
+    } else if (x == 1) {
+        1
+    } else {
+        2
+    }
+}

@@ -1,0 +1,6 @@
+// @name record_lit_missing_colon
+// @phase parser
+// @expect error
+
+type Point = { x: f64 };
+p = Point{ x 1.0 };

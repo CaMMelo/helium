@@ -2,11 +2,7 @@
 // @phase parser
 // @expect error
 
-import std.io
-
-a = 1
-b = 2
-
 main = () : IO<()> {
-    io.println("nope")
+    a = 1
+    b = 2
 }

@@ -1,0 +1,5 @@
+// @name missing_else
+// @phase parser
+// @expect error
+
+x = if (true) { 1 };

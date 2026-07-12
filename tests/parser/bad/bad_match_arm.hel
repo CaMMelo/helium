@@ -1,0 +1,5 @@
+// @name bad_match_arm
+// @phase parser
+// @expect error
+
+match 1 { x => }

@@ -1,0 +1,8 @@
+// @name top_level_semicolons
+// @phase parser
+// @expect success
+
+a = 1;
+b: i32 = 2;
+import std.io;
+type Unit = {}

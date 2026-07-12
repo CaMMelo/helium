@@ -1,0 +1,6 @@
+// @name foreign
+// @phase parser
+// @expect success
+
+foreign printf : fn(i32) -> IO<()>;
+foreign getchar : fn() -> i32;
