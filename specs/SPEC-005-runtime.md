@@ -19,14 +19,16 @@ function integration.
 
 1. Define object headers for heap-allocated values (arrays, records, ADTs,
    strings, closures).
-2. Implement `lum_retain` and `lum_release`.
+2. Implement `helium_retain` and `helium_release`.
 3. Implement destructors for runtime object kinds.
 4. Provide allocation helpers:
-   - `lum_alloc_string`
-   - `lum_alloc_array`
-   - `lum_alloc_record`
-   - `lum_alloc_closure`
-5. Provide a `lum_main_wrapper` that invokes `main` and exits with a status code.
+   - `helium_alloc_string`
+   - `helium_alloc_array`
+   - `helium_alloc_record`
+   - `helium_alloc_adt`
+   - `helium_alloc_closure`
+5. Provide a `helium_main_wrapper` that invokes `main` and exits with a status
+   code.
 6. Provide helpers for string interpolation if they cannot be generated inline
    (to be decided with SPEC-006).
 
