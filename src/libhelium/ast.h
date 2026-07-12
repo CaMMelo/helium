@@ -89,6 +89,7 @@ struct helium_expr {
 	int kind;
 	int line;
 	int col;
+	struct helium_type *inferred_type;
 	union {
 		struct helium_literal *lit;
 		struct {
@@ -311,6 +312,7 @@ struct helium_pattern *helium_pattern_constructor(const char *name, int line,
 						  int col);
 void helium_pattern_add_field(struct helium_pattern *pat,
 			      const char *name, struct helium_pattern *field);
+struct helium_pattern *helium_pattern_copy(struct helium_pattern *pat);
 void helium_pattern_free(struct helium_pattern *pat);
 
 /* -------------------------------------------------------------------------- */

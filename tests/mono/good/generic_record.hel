@@ -1,0 +1,7 @@
+foreign io_unit: IO<()>;
+
+type Box<T> = { value: T };
+
+identity = <T>(x: T): T { x };
+
+main = (identity(Box{ value: io_unit })).value;

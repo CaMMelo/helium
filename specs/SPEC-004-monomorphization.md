@@ -20,8 +20,10 @@ for code generation.
 1. Collect all instantiations of generic types and generic functions.
 2. Generate a specialized version for each distinct type argument.
 3. Replace type parameters with concrete types in the specialized bodies.
-4. Ensure recursive generic functions terminate (e.g., `identity<i32>` calls
-   itself with the same type).
+4. Ensure recursive generic functions terminate.  The monomorphizer must
+   track the specialization currently being generated and reuse it for
+   self-recursive calls, rather than generating a fresh specialization for
+   each recursive call site.
 5. Produce a list of monomorphic functions and types plus a main entry point.
 
 ## IR design
