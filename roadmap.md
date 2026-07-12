@@ -109,3 +109,5 @@ SPEC-005  ->  SPEC-006
   Pending integration with SPEC-006.
 - Front end, core compilation, modules, package manager, and testing: ready to
   be assigned once this roadmap and the specs are approved.
+- SPEC-010: test harness, directory layout, and representative tests are
+  implemented; tests currently skip because the compiler is a placeholder.

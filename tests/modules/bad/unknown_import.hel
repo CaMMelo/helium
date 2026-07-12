@@ -1,0 +1,9 @@
+// @name unknown_import
+// @phase modules
+// @expect error
+
+import does_not_exist
+
+main = () : IO<()> {
+    0
+}

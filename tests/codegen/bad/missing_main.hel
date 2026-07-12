@@ -1,0 +1,9 @@
+// @name missing_main
+// @phase codegen
+// @expect error
+
+import std.io
+
+say_hi = () : IO<()> {
+    io.println("hi")
+}

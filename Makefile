@@ -39,6 +39,8 @@ TEST_LEXER_DIR := tests/lexer
 TEST_LEXER_BIN := $(BUILD_DIR)/lexer_test
 TEST_LEXER_SRC := $(TEST_LEXER_DIR)/lexer_test.c
 
+TEST_RUNNER := ./tests/run_tests.py
+
 .PHONY: all clean test
 
 all: $(BIN_DIR)/helium $(BIN_DIR)/hel $(BUILD_DIR)/runtime
@@ -96,6 +98,8 @@ $(TEST_LEXER_BIN): $(TEST_LEXER_SRC) $(BUILD_DIR)/libhelium.a
 test: all $(TEST_LEXER_BIN)
 	@echo "Running lexer tests..."
 	@cd $(TEST_LEXER_DIR) && ./run_tests.sh $(abspath $(TEST_LEXER_BIN))
+	@echo "Running general test harness..."
+	$(TEST_RUNNER)
 
 clean:
 	rm -rf $(BUILD_DIR)

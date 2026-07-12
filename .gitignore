@@ -5,3 +5,7 @@ src/libhelium/lexer.c
 # Test outputs
 tests/lexer/*.out
 tests/lexer/*.err
+
+# Python cache
+__pycache__/
+*.py[cod]

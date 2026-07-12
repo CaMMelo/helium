@@ -1,0 +1,9 @@
+// @name import_std
+// @phase modules
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.println("stdio ok");
+}

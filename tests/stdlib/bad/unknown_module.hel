@@ -1,0 +1,9 @@
+// @name unknown_module
+// @phase stdlib
+// @expect error
+
+import std.not_a_module
+
+main = () : IO<()> {
+    0
+}

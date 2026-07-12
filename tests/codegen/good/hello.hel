@@ -1,0 +1,9 @@
+// @name hello
+// @phase codegen
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.println("Hello World");
+}

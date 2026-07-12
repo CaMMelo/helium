@@ -1,0 +1,9 @@
+// @name println
+// @phase stdlib
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.println("Hello Helium");
+}

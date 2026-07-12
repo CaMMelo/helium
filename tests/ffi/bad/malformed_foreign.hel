@@ -1,0 +1,11 @@
+// @name malformed_foreign
+// @phase ffi
+// @expect error
+
+import std.io
+
+foreign 123
+
+main = () : IO<()> {
+    io.println("nope")
+}
