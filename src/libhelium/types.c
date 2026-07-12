@@ -176,8 +176,10 @@ void helium_type_to_string(const struct helium_type *type, char *buf,
 		return;
 	}
 	if (size > 0) {
-		memcpy(buf, tmp, size - 1);
-		buf[size - 1] = '\0';
+		size_t n = len < size ? len : size - 1;
+
+		memcpy(buf, tmp, n);
+		buf[n] = '\0';
 	}
 	free(tmp);
 }
@@ -438,6 +440,15 @@ static int unify_applied(struct helium_type *a, struct helium_type *b,
 		return 0;
 
 	if (a->kind == HELIUM_TYPE_VAR) {
+		struct helium_type *mapping = helium_subst_get(*subst, a->name);
+
+		if (mapping)
+			return unify_applied(mapping, b, subst, error);
+		if (b->kind == HELIUM_TYPE_VAR) {
+			mapping = helium_subst_get(*subst, b->name);
+			if (mapping)
+				return unify_applied(a, mapping, subst, error);
+		}
 		if (helium_type_occurs(a->name, b)) {
 			format_error(error,
 				     "type error at %d:%d: occurs check failed for %s",
@@ -449,6 +460,10 @@ static int unify_applied(struct helium_type *a, struct helium_type *b,
 	}
 
 	if (b->kind == HELIUM_TYPE_VAR) {
+		struct helium_type *mapping = helium_subst_get(*subst, b->name);
+
+		if (mapping)
+			return unify_applied(a, mapping, subst, error);
 		if (helium_type_occurs(b->name, a)) {
 			format_error(error,
 				     "type error at %d:%d: occurs check failed for %s",

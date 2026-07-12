@@ -568,6 +568,7 @@ void helium_expr_free(struct helium_expr *expr)
 {
 	if (!expr)
 		return;
+	helium_type_free(expr->inferred_type);
 	switch (expr->kind) {
 	case HELIUM_EXPR_LITERAL:
 		helium_literal_free(expr->u.lit);
@@ -714,6 +715,27 @@ void helium_pattern_add_field(struct helium_pattern *pat,
 		   &pat->field_capacity, field);
 	append_ptr((void ***)&pat->field_names, &pat->field_name_count,
 		   &pat->field_name_capacity, (void *)xstrdup(name));
+}
+
+struct helium_pattern *helium_pattern_copy(struct helium_pattern *pat)
+{
+	struct helium_pattern *copy;
+	size_t i;
+
+	if (!pat)
+		return NULL;
+	copy = xalloc(sizeof(*copy));
+	copy->kind = pat->kind;
+	copy->line = pat->line;
+	copy->col = pat->col;
+	copy->name = xstrdup(pat->name);
+	copy->lit = pat->lit ? helium_literal(pat->lit->kind, pat->lit->text,
+					      pat->lit->line, pat->lit->col) :
+			       NULL;
+	for (i = 0; i < pat->field_count; i++)
+		helium_pattern_add_field(copy, pat->field_names[i],
+					 helium_pattern_copy(pat->fields[i]));
+	return copy;
 }
 
 void helium_pattern_free(struct helium_pattern *pat)

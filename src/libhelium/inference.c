@@ -85,6 +85,62 @@ static struct helium_type *type_named(const char *name)
 	return helium_type_named(name, 0, 0);
 }
 
+/* Substitute type parameters (as named types) with concrete args. */
+static struct helium_type *subst_type_params(struct helium_type *type,
+					     char **params,
+					     struct helium_type **args,
+					     size_t count)
+{
+	struct helium_type *copy;
+	size_t i;
+
+	if (!type)
+		return NULL;
+
+	if (type->kind == HELIUM_TYPE_NAMED) {
+		for (i = 0; i < count; i++) {
+			if (strcmp(type->name, params[i]) == 0)
+				return helium_type_apply(NULL, args[i]);
+		}
+		copy = helium_type_named(type->name, type->line, type->col);
+		for (i = 0; i < type->arg_count; i++) {
+			helium_type_add_arg(copy,
+					    subst_type_params(type->args[i],
+							      params,
+							      args,
+							      count));
+		}
+		return copy;
+	}
+
+	if (type->kind == HELIUM_TYPE_VAR)
+		return helium_type_copy(type);
+
+	if (type->kind == HELIUM_TYPE_FN) {
+		copy = helium_type_fn(type->line, type->col);
+		for (i = 0; i < type->param_count; i++) {
+			helium_type_add_param(copy,
+					      subst_type_params(type->params[i],
+								params,
+								args,
+								count));
+		}
+		copy->ret = subst_type_params(type->ret, params, args, count);
+		return copy;
+	}
+
+	if (type->kind == HELIUM_TYPE_ARRAY) {
+		return helium_type_array(subst_type_params(type->elem_type,
+							   params,
+							   args,
+							   count),
+					 type->array_size, type->line, type->col);
+	}
+
+	format_error(NULL, "internal error: subst_type_params unknown type kind");
+	abort();
+}
+
 static struct helium_type *make_unit_type(void)
 {
 	return type_named("()");
@@ -151,6 +207,18 @@ static int type_is_float(const struct helium_type *type)
 		return 0;
 	return strcmp(type->name, "f32") == 0 ||
 	       strcmp(type->name, "f64") == 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inferred type recording                                                    */
+/* -------------------------------------------------------------------------- */
+
+static void record_expr_type(struct helium_expr *expr, struct helium_type *type)
+{
+	if (!expr)
+		return;
+	helium_type_free(expr->inferred_type);
+	expr->inferred_type = type ? helium_type_copy(type) : NULL;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -636,12 +704,17 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 
 	if (!expr) {
 		*out = make_unit_type();
-		return 0;
+		goto done;
 	}
 
 	switch (expr->kind) {
-	case HELIUM_EXPR_LITERAL:
-		return infer_literal(expr, out);
+	case HELIUM_EXPR_LITERAL: {
+		int rc = infer_literal(expr, out);
+
+		if (rc < 0)
+			return rc;
+		goto done;
+	}
 
 	case HELIUM_EXPR_IDENT: {
 		struct helium_scheme *scheme;
@@ -650,7 +723,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		scheme = helium_env_lookup(ctx->env, expr->u.ident.name);
 		if (scheme) {
 			*out = helium_scheme_instantiate(scheme, ctx->subst);
-			return 0;
+			goto done;
 		}
 
 		constructor = helium_env_lookup_constructor(ctx->env,
@@ -658,7 +731,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		if (constructor) {
 			*out = helium_scheme_instantiate(&constructor->scheme,
 							 ctx->subst);
-			return 0;
+			goto done;
 		}
 
 		format_error(error,
@@ -694,7 +767,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			*out = helium_type_apply(ctx->subst, left);
 			helium_type_free(left);
 			helium_type_free(right);
-			return 0;
+			goto done;
 
 		case EQEQ:
 		case NEQ:
@@ -711,7 +784,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			*out = make_bool_type();
 			helium_type_free(left);
 			helium_type_free(right);
-			return 0;
+			goto done;
 
 		case AND:
 		case OR:
@@ -726,7 +799,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			*out = v;
 			helium_type_free(left);
 			helium_type_free(right);
-			return 0;
+			goto done;
 
 		case BIND: {
 			struct helium_type *arg_var;
@@ -740,7 +813,6 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			expected_right = make_fn_type(&arg_var, 1,
 						      make_io_type(ret_var));
 
-			fprintf(stderr, "DEBUG bind left\n");
 			if (helium_type_unify(left, expected_left, &ctx->subst,
 					      error) < 0) {
 				helium_type_free(left);
@@ -762,18 +834,13 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 				return -1;
 			}
 			*out = helium_type_apply(ctx->subst, make_io_type(ret_var));
-			{
-				char buf[256];
-				helium_type_to_string(*out, buf, sizeof(buf));
-				fprintf(stderr, "DEBUG bind out: %s\n", buf);
-			}
 			helium_type_free(left);
 			helium_type_free(right);
 			helium_type_free(expected_left);
 			helium_type_free(expected_right);
 			helium_type_free(arg_var);
 			helium_type_free(ret_var);
-			return 0;
+			goto done;
 		}
 
 		default:
@@ -801,13 +868,13 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			}
 			*out = v;
 			helium_type_free(operand);
-			return 0;
+			goto done;
 		}
 
 		/* PLUS and MINUS preserve the operand type. */
 		*out = helium_type_apply(ctx->subst, operand);
 		helium_type_free(operand);
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_CALL: {
@@ -874,7 +941,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			helium_type_free(arg_types[i]);
 		free(arg_types);
 		helium_type_free(func);
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_BLOCK: {
@@ -917,7 +984,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		} else {
 			*out = last;
 		}
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_IF: {
@@ -955,7 +1022,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		*out = helium_type_apply(ctx->subst, then_t);
 		helium_type_free(then_t);
 		helium_type_free(else_t);
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_MATCH: {
@@ -1086,7 +1153,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 
 		helium_type_free(value);
 		*out = result ? result : make_unit_type();
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_LOOP: {
@@ -1172,7 +1239,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		free(loop_types);
 		env_restore(ctx->env, snapshot);
 		*out = body_type;
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_RECUR: {
@@ -1209,7 +1276,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		}
 		ret = helium_type_fresh_var(expr->line, expr->col);
 		*out = ret;
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_LAMBDA: {
@@ -1295,11 +1362,16 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		tscope_free(new_scope);
 		env_restore(ctx->env, snapshot);
 		*out = fn;
-		return 0;
+		goto done;
 	}
 
-	case HELIUM_EXPR_RECORD_LIT:
-		return check_record_literal(expr, ctx, out, error);
+	case HELIUM_EXPR_RECORD_LIT: {
+		int rc = check_record_literal(expr, ctx, out, error);
+
+		if (rc < 0)
+			return rc;
+		goto done;
+	}
 
 	case HELIUM_EXPR_ARRAY_LIT: {
 		struct helium_type *elem = NULL;
@@ -1331,7 +1403,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 					 (long)expr->u.array_lit.item_count,
 					 expr->line, expr->col);
 		helium_type_free(elem);
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_FIELD: {
@@ -1363,19 +1435,20 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			struct helium_record_field *field =
 				info->def->u.record.fields[i];
 			struct helium_type *field_type;
+			struct helium_type *field_subst;
 
 			if (strcmp(field->name, expr->u.field.name) != 0)
 				continue;
-			if (resolve_type(field->type, NULL, &field_type,
-					 error) < 0) {
-				helium_type_free(obj);
-				helium_type_free(obj_applied);
-				return -1;
-			}
-			*out = field_type;
+			field_type = subst_type_params(field->type,
+						       info->def->params,
+						       obj_applied->args,
+						       obj_applied->arg_count);
+			field_subst = helium_type_apply(ctx->subst, field_type);
+			helium_type_free(field_type);
+			*out = field_subst;
 			helium_type_free(obj);
 			helium_type_free(obj_applied);
-			return 0;
+			goto done;
 		}
 		format_error(error,
 			     "%d:%d: unknown field '%s'",
@@ -1400,7 +1473,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			    (lit->kind == HELIUM_LIT_FLOAT && type_is_float(ann))) {
 				*out = helium_type_apply(ctx->subst, ann);
 				helium_type_free(ann);
-				return 0;
+				goto done;
 			}
 		}
 
@@ -1416,7 +1489,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		helium_type_free(inner);
 		*out = helium_type_apply(ctx->subst, ann);
 		helium_type_free(ann);
-		return 0;
+		goto done;
 	}
 
 	case HELIUM_EXPR_BIND: {
@@ -1467,11 +1540,16 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		helium_type_free(expected_right);
 		helium_type_free(arg_var);
 		helium_type_free(ret_var);
-		return 0;
+		goto done;
 	}
 
-	case HELIUM_EXPR_RETURN:
-		return infer_expr(expr->u.ret.expr, ctx, out, error);
+	case HELIUM_EXPR_RETURN: {
+		int rc = infer_expr(expr->u.ret.expr, ctx, out, error);
+
+		if (rc < 0)
+			return rc;
+		goto done;
+	}
 
 	case HELIUM_EXPR_FSTRING:
 		for (i = 0; i < expr->u.fstring.part_count; i++) {
@@ -1486,7 +1564,7 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			helium_type_free(pt);
 		}
 		*out = make_str_type();
-		return 0;
+		goto done;
 
 	default:
 		format_error(error,
@@ -1494,6 +1572,11 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 			     expr->line, expr->col, expr->kind);
 		return -1;
 	}
+
+
+	done:
+		record_expr_type(expr, *out);
+		return 0;
 }
 
 
@@ -1700,7 +1783,7 @@ static int infer_binding(struct helium_binding *binding, struct infer_ctx *ctx,
 /* Module checking                                                            */
 /* -------------------------------------------------------------------------- */
 
-static int check_main(struct helium_env *env, struct helium_subst *subst,
+static int check_main(struct helium_env *env, struct helium_subst **subst,
 		      char **error)
 {
 	struct helium_scheme *scheme;
@@ -1714,9 +1797,9 @@ static int check_main(struct helium_env *env, struct helium_subst *subst,
 		return -1;
 	}
 
-	main_type = helium_scheme_instantiate(scheme, subst);
+	main_type = helium_scheme_instantiate(scheme, *subst);
 	expected = make_io_type(make_unit_type());
-	rc = helium_type_unify(main_type, expected, &subst, error);
+	rc = helium_type_unify(main_type, expected, subst, error);
 	helium_type_free(main_type);
 	helium_type_free(expected);
 	return rc;
@@ -1756,10 +1839,206 @@ static int scheme_has_escaping_vars(struct helium_scheme *scheme,
 	return 0;
 }
 
-int helium_check_module(struct helium_module *module, char **error)
+/* -------------------------------------------------------------------------- */
+/* Apply final substitution to inferred types stored on the AST               */
+/* -------------------------------------------------------------------------- */
+
+static void apply_subst_to_expr(struct helium_expr *expr,
+				struct helium_subst *subst);
+
+static void apply_subst_to_exprs(struct helium_expr **exprs, size_t count,
+				 struct helium_subst *subst)
 {
+	size_t i;
+
+	for (i = 0; i < count; i++)
+		apply_subst_to_expr(exprs[i], subst);
+}
+
+static void apply_subst_to_type(struct helium_type **type,
+				struct helium_subst *subst)
+{
+	struct helium_type *applied;
+
+	if (!type || !*type)
+		return;
+	applied = helium_type_apply(subst, *type);
+	helium_type_free(*type);
+	*type = applied;
+}
+
+static void apply_subst_to_pattern(struct helium_pattern *pat,
+				   struct helium_subst *subst)
+{
+	size_t i;
+
+	if (!pat)
+		return;
+	for (i = 0; i < pat->field_count; i++)
+		apply_subst_to_pattern(pat->fields[i], subst);
+}
+
+static void apply_subst_to_expr(struct helium_expr *expr,
+				struct helium_subst *subst)
+{
+	size_t i;
+
+	if (!expr)
+		return;
+
+	apply_subst_to_type(&expr->inferred_type, subst);
+
+	switch (expr->kind) {
+	case HELIUM_EXPR_LITERAL:
+		break;
+	case HELIUM_EXPR_IDENT:
+		break;
+	case HELIUM_EXPR_BINARY:
+		apply_subst_to_expr(expr->u.binary.left, subst);
+		apply_subst_to_expr(expr->u.binary.right, subst);
+		break;
+	case HELIUM_EXPR_UNARY:
+		apply_subst_to_expr(expr->u.unary.operand, subst);
+		break;
+	case HELIUM_EXPR_CALL:
+		apply_subst_to_expr(expr->u.call.func, subst);
+		apply_subst_to_exprs(expr->u.call.args, expr->u.call.arg_count,
+				     subst);
+		break;
+	case HELIUM_EXPR_BLOCK: {
+		for (i = 0; i < expr->u.block.binding_count; i++) {
+			struct helium_binding *b = expr->u.block.bindings[i];
+
+			apply_subst_to_type(&b->type, subst);
+			apply_subst_to_expr(b->value, subst);
+		}
+		apply_subst_to_exprs(expr->u.block.exprs, expr->u.block.expr_count,
+				     subst);
+		break;
+	}
+	case HELIUM_EXPR_IF:
+		apply_subst_to_expr(expr->u.if_expr.cond, subst);
+		apply_subst_to_expr(expr->u.if_expr.then_branch, subst);
+		apply_subst_to_expr(expr->u.if_expr.else_branch, subst);
+		break;
+	case HELIUM_EXPR_MATCH:
+		apply_subst_to_expr(expr->u.match.value, subst);
+		for (i = 0; i < expr->u.match.arm_count; i++) {
+			apply_subst_to_pattern(expr->u.match.arms[i]->pattern,
+					       subst);
+			apply_subst_to_expr(expr->u.match.arms[i]->expr, subst);
+		}
+		break;
+	case HELIUM_EXPR_LOOP:
+		for (i = 0; i < expr->u.loop.binding_count; i++) {
+			struct helium_loop_binding *lb = expr->u.loop.bindings[i];
+
+			apply_subst_to_type(&lb->type, subst);
+			apply_subst_to_expr(lb->init, subst);
+		}
+		apply_subst_to_expr(expr->u.loop.body, subst);
+		break;
+	case HELIUM_EXPR_RECUR:
+		apply_subst_to_exprs(expr->u.recur.args, expr->u.recur.arg_count,
+				     subst);
+		break;
+	case HELIUM_EXPR_LAMBDA: {
+		for (i = 0; i < expr->u.lambda.param_count; i++)
+			apply_subst_to_type(&expr->u.lambda.params[i]->type,
+					    subst);
+		apply_subst_to_type(&expr->u.lambda.ret_type, subst);
+		apply_subst_to_expr(expr->u.lambda.body, subst);
+		break;
+	}
+	case HELIUM_EXPR_RECORD_LIT:
+		for (i = 0; i < expr->u.record_lit.field_count; i++)
+			apply_subst_to_expr(expr->u.record_lit.fields[i]->value,
+					    subst);
+		break;
+	case HELIUM_EXPR_ARRAY_LIT:
+		apply_subst_to_exprs(expr->u.array_lit.items,
+				     expr->u.array_lit.item_count, subst);
+		break;
+	case HELIUM_EXPR_FIELD:
+		apply_subst_to_expr(expr->u.field.object, subst);
+		break;
+	case HELIUM_EXPR_ANNOT:
+		apply_subst_to_type(&expr->u.annot.type, subst);
+		apply_subst_to_expr(expr->u.annot.expr, subst);
+		break;
+	case HELIUM_EXPR_BIND:
+		apply_subst_to_expr(expr->u.bind.left, subst);
+		apply_subst_to_expr(expr->u.bind.right, subst);
+		break;
+	case HELIUM_EXPR_RETURN:
+		apply_subst_to_expr(expr->u.ret.expr, subst);
+		break;
+	case HELIUM_EXPR_FSTRING:
+		for (i = 0; i < expr->u.fstring.part_count; i++) {
+			struct helium_fstring_part *part =
+				expr->u.fstring.parts[i];
+
+			if (part->is_expr)
+				apply_subst_to_expr(part->u.expr, subst);
+		}
+		break;
+	}
+}
+
+static void apply_subst_to_binding(struct helium_binding *binding,
+				   struct helium_subst *subst)
+{
+	if (!binding)
+		return;
+	apply_subst_to_type(&binding->type, subst);
+	apply_subst_to_expr(binding->value, subst);
+}
+
+static void apply_subst_to_decl(struct helium_top_decl *decl,
+				struct helium_subst *subst)
+{
+	if (!decl)
+		return;
+	switch (decl->kind) {
+	case HELIUM_DECL_BINDING:
+		apply_subst_to_binding(decl->u.binding, subst);
+		break;
+	case HELIUM_DECL_TYPE:
+	case HELIUM_DECL_IMPORT:
+	case HELIUM_DECL_FOREIGN:
+		break;
+	}
+}
+
+static void apply_subst_to_module(struct helium_module *module,
+				  struct helium_subst *subst)
+{
+	size_t i;
+
+	if (!module)
+		return;
+	for (i = 0; i < module->decl_count; i++)
+		apply_subst_to_decl(module->decls[i], subst);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Public API                                                                 */
+/* -------------------------------------------------------------------------- */
+
+void helium_typed_module_free(struct helium_typed_module *typed)
+{
+	if (!typed)
+		return;
+	helium_env_free(typed->env);
+	helium_subst_free(typed->subst);
+	free(typed);
+}
+
+int helium_infer_module(struct helium_module *module,
+			struct helium_typed_module **out, char **error)
+{
+	struct helium_typed_module *typed = NULL;
 	struct helium_env *env;
-	struct helium_subst *subst;
 	struct infer_ctx ctx;
 	struct tscope *scope;
 	size_t i;
@@ -1770,12 +2049,14 @@ int helium_check_module(struct helium_module *module, char **error)
 		return -1;
 	}
 
+	if (out)
+		*out = NULL;
+
 	env = helium_env_new();
-	subst = helium_subst_new();
 	scope = tscope_push(NULL, NULL, 0);
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.env = env;
-	ctx.subst = subst;
+	ctx.subst = helium_subst_new();
 	ctx.tscope = scope;
 
 	for (i = 0; i < module->decl_count; i++) {
@@ -1815,7 +2096,7 @@ int helium_check_module(struct helium_module *module, char **error)
 
 			placeholder = helium_env_lookup(env, binding->name);
 			if (helium_type_unify(placeholder->type, sch->type,
-					      &subst, error) < 0) {
+					      &ctx.subst, error) < 0) {
 				helium_scheme_free(sch);
 				rc = -1;
 				goto out;
@@ -1847,14 +2128,36 @@ int helium_check_module(struct helium_module *module, char **error)
 		}
 	}
 
-	if (check_main(env, subst, error) < 0) {
+	if (check_main(env, &ctx.subst, error) < 0) {
 		rc = -1;
 		goto out;
+	}
+
+	apply_subst_to_module(module, ctx.subst);
+
+	if (out) {
+		typed = xalloc(sizeof(*typed));
+		typed->module = module;
+		typed->env = env;
+		typed->subst = ctx.subst;
+		ctx.subst = NULL;
+		env = NULL;
+		*out = typed;
 	}
 
 out:
 	tscope_free(scope);
 	helium_env_free(env);
-	helium_subst_free(subst);
+	helium_subst_free(ctx.subst);
+	return rc;
+}
+
+int helium_check_module(struct helium_module *module, char **error)
+{
+	struct helium_typed_module *typed = NULL;
+	int rc;
+
+	rc = helium_infer_module(module, &typed, error);
+	helium_typed_module_free(typed);
 	return rc;
 }

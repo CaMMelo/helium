@@ -51,6 +51,10 @@ TEST_TYPE_DIR := tests/type
 TEST_TYPE_BIN := $(BUILD_DIR)/type_test
 TEST_TYPE_SRC := $(TEST_TYPE_DIR)/type_test.c
 
+TEST_MONO_DIR := tests/mono
+TEST_MONO_BIN := $(BUILD_DIR)/mono_test
+TEST_MONO_SRC := $(TEST_MONO_DIR)/mono_test.c
+
 TEST_RUNNER := ./tests/run_tests.py
 
 .PHONY: all clean test
@@ -125,13 +129,20 @@ $(TEST_TYPE_BIN): $(TEST_TYPE_SRC) $(BUILD_DIR)/libhelium.a
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(LIBHELIUM_DIR) -o $@ $< $(BUILD_DIR)/libhelium.a
 
-test: all $(TEST_LEXER_BIN) $(TEST_PARSER_BIN) $(TEST_TYPE_BIN)
+# Monomorphization test harness
+$(TEST_MONO_BIN): $(TEST_MONO_SRC) $(BUILD_DIR)/libhelium.a
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(LIBHELIUM_DIR) -o $@ $< $(BUILD_DIR)/libhelium.a
+
+test: all $(TEST_LEXER_BIN) $(TEST_PARSER_BIN) $(TEST_TYPE_BIN) $(TEST_MONO_BIN)
 	@echo "Running lexer tests..."
 	@cd $(TEST_LEXER_DIR) && ./run_tests.sh $(abspath $(TEST_LEXER_BIN))
 	@echo "Running parser tests..."
 	@cd $(TEST_PARSER_DIR) && ./run_tests.sh $(abspath $(TEST_PARSER_BIN))
 	@echo "Running type tests..."
 	@cd $(TEST_TYPE_DIR) && ./run_tests.sh $(abspath $(TEST_TYPE_BIN))
+	@echo "Running mono tests..."
+	@cd $(TEST_MONO_DIR) && ./run_tests.sh $(abspath $(TEST_MONO_BIN))
 	@echo "Running general test harness..."
 	$(TEST_RUNNER)
 
