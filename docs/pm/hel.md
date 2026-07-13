@@ -38,30 +38,34 @@ Creates a new Helium project with the following layout:
 Default files created by `init`:
 
 - `src/main.hel` containing a minimal `main` that returns a no-op `IO<()>` action without importing any external module.
-- `lib/math.hel` containing a minimal module skeleton.
+- `lib/math.hel` containing a minimal module skeleton with a tiny exported
+  `add` function.
 - `tests/smoke_test.hel` containing a minimal runnable codegen test that returns a no-op `IO<()>` action without importing any external module.
 
 `hel init` does not copy the test harness into the project.  `hel test` invokes the repository's `tests/run_tests.py` directly, passing the project directory with `--project`.
 
 ### `hel build`
 
-Resolves dependencies, compiles the project, and produces an executable in
+Resolves dependencies, compiles local libraries, and produces an executable in
 `build/`.
 
 Steps:
 
 1. Read `Heliumfile` and `Heliumfile.lock`.
 2. Ensure cached dependencies exist in `.helium/`.
-3. Invoke the Helium compiler with module search paths for:
-   - the project root,
-   - the project's `lib/` directory,
-   - each versioned directory under the project's `.helium/` cache.
-
-   The repository's own `lib/` directory is **not** included automatically; any
-   standard library modules such as `std.io` must be added to the project
-   explicitly (for example under the project's `lib/` or into `.helium/`).
-4. Link the resulting objects and any required `.so`/`.o` dependencies.
-5. Place the final binary in `build/`.
+3. Recursively scan the project's `lib/` directory for `.hel` source files.
+   For each `lib/<pkg>/<module>.hel` (or `lib/<module>.hel` at the top level):
+   - compile it to `build/lib/<pkg>/<module>.o` and emit
+     `build/lib/<pkg>/<module>.hei`;
+   - copy the `.hel`, `.hei`, and `.o` files into
+     `.helium/<pkg>/<version>/`, using the project version from `Heliumfile`.
+   Local libraries are therefore made available to `src/main.hel` through the
+   `.helium/` cache, not through the raw `lib/` directory.
+4. Invoke the Helium compiler on `src/main.hel`.  The compiler is given only
+   the explicit `.helium/<name>/<version>/` cache directories as module search
+   paths; it does not walk ancestor directories or implicitly add `lib/`.
+5. Link the resulting objects and any required `.so`/`.o` dependencies.
+6. Place the final binary in `build/`.
 
 `hel build` does not create symlinks of `Heliumfile`, `Heliumfile.lock`, or `.helium` inside `src/`.
 
@@ -129,6 +133,12 @@ The compiler uses the interface files for type checking and the object/shared
 files for linking. In the bootstrap implementation the cache must also contain
 a matching `.hel` source stub so the compiler can resolve the import path; the
 stub is not recompiled when the object and interface files are up to date.
+
+Local libraries follow the same cache layout: a project with `lib/std/io.hel`
+and version `0.1.0` installs the compiled module to
+`.helium/std/0.1.0/io.{hel,hei,o}`.  Imports in `src/main.hel` still use the
+original package name (`import std.io`), which the compiler resolves against
+the `.helium/std/0.1.0/` cache directory.
 
 ## 5. Registries
 

@@ -40,9 +40,11 @@ Implement the `hel` command-line package manager.
 - `hel init` does not copy `tests/run_tests.py` into the project; `hel test`
   invokes the repository harness with `--project <project-root>`.
 - `hel build` does not create symlinks of `Heliumfile`, `Heliumfile.lock`, or
-  `.helium` inside `src/`.  Instead it invokes the compiler with explicit module
-  search paths covering the project root, project `lib/`, repository `lib/`, and
-  each versioned directory under `.helium/`.
+  `.helium` inside `src/`.  Instead it compiles local `lib/` modules into
+  `build/lib/` and installs them into `.helium/<pkg>/<version>/`, then invokes
+  the compiler with explicit module search paths covering only the versioned
+  directories under `.helium/`.  The compiler no longer walks ancestor
+  directories or implicitly adds `cwd/lib`.
 - In the bootstrap implementation, cached packages must also contain a `.hel`
   source stub alongside the compiled artifacts. The stub is required so the
   compiler can resolve the import path, but it is not recompiled when the

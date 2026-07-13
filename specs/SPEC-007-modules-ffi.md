@@ -21,8 +21,10 @@ interface.
 ## Requirements
 
 1. Resolve imports against:
-   - Local `lib/` directory.
+   - The source file's own directory (for relative imports).
+   - Explicit module search paths passed via `-I` / `opts.module_paths`.
    - Cached dependencies under `.helium/<name>/<version>/`.
+   The compiler does not walk ancestor directories or implicitly add `cwd/lib`.
 2. Load module interface files (`.hei`) for type checking.
 3. Emit `.hei` files when compiling a module.
 4. Support `module Name;` declarations.
@@ -45,7 +47,8 @@ length<T> : fn([T; 0]) -> i32
 
 ## Acceptance criteria
 
-- [x] A program imports a local `lib/` module and uses its values.
+- [x] A program imports a local `lib/` module (installed into `.helium/` by
+      `hel build`) and uses its values.
 - [x] A program imports a cached dependency module and links to its compiled
       artifacts.
 - [x] A foreign function declared in Helium can call a C function from a linked
