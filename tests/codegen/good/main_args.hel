@@ -1,0 +1,15 @@
+// @name main_args
+// @phase codegen
+// @expect success
+// @command sh -c 'rm -f /tmp/helium_main_args && ./build/bin/helium tests/codegen/good/main_args.hel -o /tmp/helium_main_args && /tmp/helium_main_args arg1 arg2'
+
+import std.io
+
+foreign helium_array_length : fn([str]) -> i32;
+foreign helium_array_get_str : fn([str], i32) -> str;
+
+main = (args: [str]) : IO<()> {
+    io.print_int(helium_array_length(args));
+    io.println("");
+    io.println(helium_array_get_str(args, 0));
+}
