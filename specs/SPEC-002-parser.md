@@ -36,7 +36,8 @@ noted below:
    - array literals
    - type annotations `expr: Type`
    - monadic bind `expr >>= expr`
-6. **Foreign declarations** — `foreign name : Type;`.
+6. **Foreign declarations** — `foreign name : Type;` and generic foreign
+   declarations `foreign name<T> : Type;`.
 
 ## AST design
 

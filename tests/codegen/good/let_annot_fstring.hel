@@ -1,0 +1,10 @@
+// @name let_annot_fstring
+// @phase codegen
+// @expect success
+
+import std.io;
+
+main = (args: [str]): IO<()> {
+    n: i32 = 10;
+    io.println(f"Você passou {n} argumentos.")
+}

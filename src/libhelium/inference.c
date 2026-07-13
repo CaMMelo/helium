@@ -1750,6 +1750,7 @@ static int infer_binding(struct helium_binding *binding, struct infer_ctx *ctx,
 		if ((lit->kind == HELIUM_LIT_INT && type_is_integer(ann)) ||
 		    (lit->kind == HELIUM_LIT_FLOAT && type_is_float(ann))) {
 			/* Numeric literals take their explicit annotation type. */
+			record_expr_type(binding->value, ann);
 			*out = helium_scheme_generalize(ann, ctx->env, ctx->subst);
 			helium_type_free(ann);
 			return 0;
@@ -2134,13 +2135,23 @@ static int infer_module_internal(struct helium_module *module,
 		case HELIUM_DECL_FOREIGN: {
 			struct helium_type *resolved;
 			struct helium_scheme *sch;
+			struct tscope *fscope = scope;
+			size_t pcount = decl->u.foreign.type_param_count;
 
-			if (resolve_type(decl->u.foreign.type, scope, &resolved,
+			if (pcount)
+				fscope = tscope_push(scope, decl->u.foreign.type_params,
+						     pcount);
+			if (resolve_type(decl->u.foreign.type, fscope, &resolved,
 					 error) < 0) {
+				if (pcount)
+					tscope_free(fscope);
 				rc = -1;
 				goto out;
 			}
-			sch = helium_scheme_new(resolved, NULL, 0);
+			if (pcount)
+				tscope_free(fscope);
+			sch = helium_scheme_new(resolved, decl->u.foreign.type_params,
+						pcount);
 			helium_env_add_binding(env, decl->u.foreign.name, sch);
 			helium_scheme_free(sch);
 			break;

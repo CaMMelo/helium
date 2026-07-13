@@ -42,11 +42,12 @@ Foreign functions are declared with a foreign signature. The compiler emits the
 necessary calling-convention glue. From the caller's perspective, a foreign
 function is an ordinary Helium function.
 
-Foreign functions are declared with the `foreign` keyword, a name, a colon, and
-a Helium function type:
+Foreign functions are declared with the `foreign` keyword, a name, an optional
+list of type parameters, a colon, and a Helium function type:
 
 ```helium
 foreign puts : fn(str) -> i32;
+foreign length<T> : fn([T; 0]) -> i32;
 ```
 
 The standard library uses FFI to wrap C functions. `io.println` is not a

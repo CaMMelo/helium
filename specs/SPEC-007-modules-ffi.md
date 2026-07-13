@@ -27,7 +27,8 @@ interface.
 3. Emit `.hei` files when compiling a module.
 4. Support `module Name;` declarations.
 5. Support qualified access `module.name`.
-6. Allow `foreign name : Type;` declarations.
+6. Allow `foreign name : Type;` declarations, including generic foreign
+   declarations of the form `foreign name<T> : Type;`.
 7. Generate correct calling-convention glue for foreign functions.
 8. Link foreign libraries specified in `Heliumfile`.
 
@@ -39,6 +40,7 @@ A textual format listing exported names with their types:
 module math
 pi : f64
 add : fn(i32, i32) -> i32
+length<T> : fn([T; 0]) -> i32
 ```
 
 ## Acceptance criteria

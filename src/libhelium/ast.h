@@ -477,6 +477,8 @@ struct helium_top_decl {
 		struct {
 			char *name;
 			struct helium_type *type;
+			char **type_params;
+			size_t type_param_count;
 		} foreign;
 	} u;
 };
@@ -486,6 +488,8 @@ struct helium_top_decl *helium_decl_import(struct helium_import *import,
 struct helium_top_decl *helium_decl_type(struct helium_type_def *type_def);
 struct helium_top_decl *helium_decl_binding(struct helium_binding *binding);
 struct helium_top_decl *helium_decl_foreign(const char *name,
+					    char **type_params,
+					    size_t type_param_count,
 					    struct helium_type *type,
 					    int line, int col);
 void helium_top_decl_free(struct helium_top_decl *decl);

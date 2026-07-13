@@ -5,8 +5,7 @@ module list;
  * are deferred because they need dynamic allocation (map/filter) or element
  * access (fold) not yet exposed to library code through the FFI.
  *
- * The demonstration below provides length for empty i32 arrays.  The runtime
- * helper works for any array, but the bootstrap type system requires the size
- * to be explicit in the foreign declaration.
+ * The runtime helper works for any array, so `length` is declared as a generic
+ * foreign function over the element type.
  */
-foreign length : fn([i32; 0]) -> i32;
+foreign length<T> : fn([T; 0]) -> i32;

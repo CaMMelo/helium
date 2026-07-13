@@ -101,7 +101,7 @@ struct pf_pair {
 %type <variant> variant
 %type <field_init> field_init
 %type <fstring_part> fstring_part
-%type <ident_list> ident_list type_decl_params
+%type <ident_list> ident_list type_decl_params opt_type_params
 %type <record_fields> record_field_list opt_record_field_list
 %type <variants> variant_list
 %type <types> type_list
@@ -481,11 +481,32 @@ binding_decl:
     }
 ;
 
-foreign_decl:
-    FOREIGN IDENT COLON type opt_semi
+opt_type_params:
+    /* empty */
     {
-	$$ = helium_decl_foreign($2, $4, @1.first_line, @1.first_column);
+	$$ = NULL;
+    }
+|   LT ident_list GT
+    {
+	$$ = $2;
+    }
+;
+
+foreign_decl:
+    FOREIGN IDENT opt_type_params COLON type opt_semi
+    {
+	char **tp = $3;
+	size_t count = 0;
+
+	if (tp) {
+		while (tp[count])
+			count++;
+	}
+	$$ = helium_decl_foreign($2, tp, count, $5,
+				 @1.first_line, @1.first_column);
 	free($2);
+	if (tp)
+		free(tp);
     }
 ;
 

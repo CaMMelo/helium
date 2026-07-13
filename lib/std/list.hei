@@ -1,2 +1,2 @@
 module list
-length : fn([i32; 0]) -> i32
+length<T> : fn([T; 0]) -> i32

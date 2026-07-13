@@ -1,0 +1,11 @@
+// @name list_length_str
+// @phase codegen
+// @expect success
+
+import std.io;
+import std.list;
+
+main = (args: [str]): IO<()> {
+    n = list.length(args);
+    io.println(f"Você passou {n} argumentos.")
+}

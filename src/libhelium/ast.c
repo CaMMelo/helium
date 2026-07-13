@@ -1033,16 +1033,32 @@ struct helium_top_decl *helium_decl_binding(struct helium_binding *binding)
 }
 
 struct helium_top_decl *helium_decl_foreign(const char *name,
+					    char **type_params,
+					    size_t type_param_count,
 					    struct helium_type *type,
 					    int line, int col)
 {
 	struct helium_top_decl *decl = xalloc(sizeof(*decl));
+	char **params = NULL;
+	size_t i;
 
 	decl->kind = HELIUM_DECL_FOREIGN;
 	decl->line = line;
 	decl->col = col;
 	decl->u.foreign.name = xstrdup(name);
 	decl->u.foreign.type = type;
+	decl->u.foreign.type_params = NULL;
+	decl->u.foreign.type_param_count = type_param_count;
+
+	if (type_param_count) {
+		params = malloc(type_param_count * sizeof(*params));
+		if (!params)
+			abort();
+		for (i = 0; i < type_param_count; i++)
+			params[i] = xstrdup(type_params[i]);
+		decl->u.foreign.type_params = params;
+	}
+
 	return decl;
 }
 
@@ -1060,10 +1076,16 @@ void helium_top_decl_free(struct helium_top_decl *decl)
 	case HELIUM_DECL_BINDING:
 		helium_binding_free(decl->u.binding);
 		break;
-	case HELIUM_DECL_FOREIGN:
+	case HELIUM_DECL_FOREIGN: {
+		size_t i;
+
 		free(decl->u.foreign.name);
 		helium_type_free(decl->u.foreign.type);
+		for (i = 0; i < decl->u.foreign.type_param_count; i++)
+			free(decl->u.foreign.type_params[i]);
+		free(decl->u.foreign.type_params);
 		break;
+	}
 	}
 	free(decl);
 }

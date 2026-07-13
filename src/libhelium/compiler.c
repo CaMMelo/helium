@@ -411,6 +411,8 @@ static void inject_imported_decls(struct helium_module *module,
 				     exp->name) < 0)
 				abort();
 			decl = helium_decl_foreign(mangled,
+						   exp->type_params,
+						   exp->type_param_count,
 						   helium_type_copy(exp->type),
 						   0, 0);
 			free(mangled);

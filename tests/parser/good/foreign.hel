@@ -4,3 +4,4 @@
 
 foreign printf : fn(i32) -> IO<()>;
 foreign getchar : fn() -> i32;
+foreign length<T> : fn([T; 0]) -> i32;

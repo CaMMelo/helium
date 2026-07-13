@@ -17,6 +17,8 @@ struct helium_env;
 struct helium_interface_export {
 	char *name;
 	struct helium_type *type;
+	char **type_params;
+	size_t type_param_count;
 };
 
 struct helium_module_interface {
@@ -34,6 +36,8 @@ struct helium_module_interface *helium_module_interface_new(const char *name,
 void helium_module_interface_free(struct helium_module_interface *iface);
 void helium_module_interface_add_export(struct helium_module_interface *iface,
 					const char *name,
+					char **type_params,
+					size_t type_param_count,
 					struct helium_type *type);
 struct helium_type *helium_module_interface_lookup(
 				struct helium_module_interface *iface,

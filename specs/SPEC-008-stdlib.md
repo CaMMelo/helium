@@ -38,7 +38,8 @@ without compiler magic.
 6. `std.list` documents that arrays are the list-like aggregate in this
    bootstrap.  Generic `map`/`filter`/`fold` are deferred because they require
    dynamic allocation or element access not yet exposed to library code through
-   the FFI.  A demonstration `length` for empty `i32` arrays is provided.
+   the FFI.  `length` is provided as a generic foreign function that works for
+   arrays of any element type.
 
 ## Acceptance criteria
 
@@ -55,9 +56,9 @@ without compiler magic.
 - `str` is represented as a C string pointer in the bootstrap runtime, so
   `std.string.length` is implemented with `strlen`.
 - Arrays are represented as `helium_array_t` pointers; `std.list.length` reads
-  the runtime `length` field.  The bootstrap type system requires the array
-  size to be explicit in foreign declarations, so the demonstration is limited
-  to `[i32; 0]`.
+  the runtime `length` field.  It is declared as a generic foreign function
+  `length<T> : fn([T; 0]) -> i32`, so it can be used with arrays of any
+  element type.
 - A codegen bug where binary/unary operators used lexer token codes instead of
   bison token codes was fixed so that `std.string.is_empty` and other
   comparisons produce correct LLVM IR.

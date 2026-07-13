@@ -47,6 +47,25 @@ static void append_ptr(void ***items, size_t *count, size_t *cap, void *item)
 	(*items)[(*count)++] = item;
 }
 
+static int string_in_list(const char *s, char **list, size_t count);
+static void append_string(char ***items, size_t *count, size_t *cap,
+			  char *item);
+
+static void append_string(char ***items, size_t *count, size_t *cap,
+			  char *item)
+{
+	if (*count == *cap) {
+		size_t newcap = *cap ? *cap * 2 : 4;
+		char **tmp = realloc(*items, newcap * sizeof(*tmp));
+
+		if (!tmp)
+			abort();
+		*items = tmp;
+		*cap = newcap;
+	}
+	(*items)[(*count)++] = item;
+}
+
 static void format_error(char **error, const char *fmt, ...)
 {
 	va_list ap;
@@ -174,6 +193,8 @@ struct ifc_lexer {
 	const char *input;
 	size_t pos;
 	struct ifc_tok current;
+	char **type_params;
+	size_t type_param_count;
 };
 
 static int is_ident_char(char c)
@@ -242,6 +263,8 @@ static void ifc_lexer_init(struct ifc_lexer *lex, const char *input)
 	lex->pos = 0;
 	lex->current.text = NULL;
 	lex->current.kind = IFC_TOK_EOF;
+	lex->type_params = NULL;
+	lex->type_param_count = 0;
 	ifc_lexer_next(lex);
 }
 
@@ -287,6 +310,10 @@ static struct helium_type *ifc_parse_named(struct ifc_lexer *lex, char **error)
 		}
 		ifc_lexer_next(lex);
 	}
+
+	if (string_in_list(type->name, lex->type_params,
+			   lex->type_param_count))
+		type->kind = HELIUM_TYPE_VAR;
 
 	return type;
 }
@@ -444,9 +471,15 @@ void helium_module_interface_free(struct helium_module_interface *iface)
 	free(iface->source_path);
 	free(iface->object_path);
 	for (i = 0; i < iface->export_count; i++) {
-		free(iface->exports[i]->name);
-		helium_type_free(iface->exports[i]->type);
-		free(iface->exports[i]);
+		struct helium_interface_export *exp = iface->exports[i];
+		size_t j;
+
+		free(exp->name);
+		helium_type_free(exp->type);
+		for (j = 0; j < exp->type_param_count; j++)
+			free(exp->type_params[j]);
+		free(exp->type_params);
+		free(exp);
 	}
 	free(iface->exports);
 	free(iface);
@@ -454,12 +487,25 @@ void helium_module_interface_free(struct helium_module_interface *iface)
 
 void helium_module_interface_add_export(struct helium_module_interface *iface,
 					const char *name,
+					char **type_params,
+					size_t type_param_count,
 					struct helium_type *type)
 {
 	struct helium_interface_export *exp = xalloc(sizeof(*exp));
+	size_t i;
 
 	exp->name = xstrdup(name);
 	exp->type = helium_type_copy(type);
+	exp->type_params = NULL;
+	exp->type_param_count = type_param_count;
+	if (type_param_count) {
+		exp->type_params = malloc(type_param_count *
+					  sizeof(*exp->type_params));
+		if (!exp->type_params)
+			abort();
+		for (i = 0; i < type_param_count; i++)
+			exp->type_params[i] = xstrdup(type_params[i]);
+	}
 	append_ptr((void ***)&iface->exports, &iface->export_count,
 		   &iface->export_capacity, exp);
 }
@@ -537,7 +583,11 @@ struct helium_module_interface *helium_module_interface_load(
 
 		if (lex.current.kind == IFC_TOK_IDENT) {
 			char *name;
+			char **params = NULL;
+			size_t pcount = 0;
+			size_t pcap = 0;
 			struct helium_type *type;
+			size_t i;
 
 			if (!have_module) {
 				format_error(error,
@@ -549,21 +599,59 @@ struct helium_module_interface *helium_module_interface_load(
 			name = xstrdup(lex.current.text);
 			ifc_lexer_next(&lex);
 
+			if (lex.current.kind == IFC_TOK_LT) {
+				ifc_lexer_next(&lex);
+				while (lex.current.kind == IFC_TOK_IDENT) {
+					append_string(&params, &pcount, &pcap,
+						      xstrdup(lex.current.text));
+					ifc_lexer_next(&lex);
+					if (lex.current.kind == IFC_TOK_COMMA) {
+						ifc_lexer_next(&lex);
+						continue;
+					}
+					break;
+				}
+				if (lex.current.kind != IFC_TOK_GT) {
+					format_error(error, "%s: expected '>'",
+						     path);
+					free(name);
+					for (i = 0; i < pcount; i++)
+						free(params[i]);
+					free(params);
+					goto fail;
+				}
+				ifc_lexer_next(&lex);
+			}
+
 			if (lex.current.kind != IFC_TOK_COLON) {
 				format_error(error, "%s: expected ':'", path);
 				free(name);
+				for (i = 0; i < pcount; i++)
+					free(params[i]);
+				free(params);
 				goto fail;
 			}
 			ifc_lexer_next(&lex);
 
+			lex.type_params = params;
+			lex.type_param_count = pcount;
 			type = ifc_parse_type(&lex, error);
+			lex.type_params = NULL;
+			lex.type_param_count = 0;
 			if (!type) {
 				free(name);
+				for (i = 0; i < pcount; i++)
+					free(params[i]);
+				free(params);
 				goto fail;
 			}
-			helium_module_interface_add_export(iface, name, type);
+			helium_module_interface_add_export(iface, name, params,
+							   pcount, type);
 			helium_type_free(type);
 			free(name);
+			for (i = 0; i < pcount; i++)
+				free(params[i]);
+			free(params);
 			continue;
 		}
 
@@ -631,7 +719,19 @@ int helium_module_interface_emit(struct helium_module *module,
 			fclose(f);
 			return -1;
 		}
-		fprintf(f, "%s : %s\n", name, type_str);
+		fprintf(f, "%s", name);
+		if (scheme->var_count > 0) {
+			size_t j;
+
+			fprintf(f, "<");
+			for (j = 0; j < scheme->var_count; j++) {
+				if (j)
+					fprintf(f, ", ");
+				fprintf(f, "%s", scheme->vars[j]);
+			}
+			fprintf(f, ">");
+		}
+		fprintf(f, " : %s\n", type_str);
 		free(type_str);
 	}
 
