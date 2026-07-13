@@ -37,10 +37,11 @@ Creates a new Helium project with the following layout:
 
 Default files created by `init`:
 
-- `src/main.hel` containing a minimal `main`.
+- `src/main.hel` containing a minimal `main` that imports `std.io` and prints a greeting.
 - `lib/math.hel` containing a minimal module skeleton.
 - `tests/smoke_test.hel` containing a minimal test entry point.
-- `tests/run_tests.py` copied from the bootstrap harness so `hel test` works out of the box.
+
+`hel init` does not copy the test harness into the project.  `hel test` invokes the repository's `tests/run_tests.py` directly, passing the project directory with `--project`.
 
 ### `hel build`
 
@@ -51,9 +52,15 @@ Steps:
 
 1. Read `Heliumfile` and `Heliumfile.lock`.
 2. Ensure cached dependencies exist in `.helium/`.
-3. Invoke the Helium compiler with the correct module search paths.
+3. Invoke the Helium compiler with module search paths for:
+   - the project root,
+   - the project's `lib/` directory,
+   - the repository's `lib/` directory (so `import std.io` works),
+   - each versioned directory under the project's `.helium/` cache.
 4. Link the resulting objects and any required `.so`/`.o` dependencies.
 5. Place the final binary in `build/`.
+
+`hel build` does not create symlinks of `Heliumfile`, `Heliumfile.lock`, or `.helium` inside `src/`.
 
 ### `hel run`
 
@@ -62,9 +69,10 @@ Builds the project if needed and then runs the produced binary.
 ### `hel test`
 
 Builds the project if needed and then runs the test suite defined in
-`tests/`. The test harness and discovery rules are specified in
-SPEC-010. `hel test` must report pass/fail per test and exit with a non-zero
-status if any test fails.
+`tests/`.  It invokes the repository's `tests/run_tests.py` with `--project
+<project-root>` so the harness discovers and runs the project's own tests.
+`hel test` reports pass/fail per test and exits with a non-zero status if any
+ test fails.
 
 ### `hel add <package>[@<version>]`
 
