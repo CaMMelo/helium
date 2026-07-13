@@ -128,10 +128,7 @@ SPEC-005  ->  SPEC-006
   implemented; execution is blocked by SPEC-006.
 - SPEC-009 package manager: `hel init/build/run/test/add/remove/update` are
   implemented; end-to-end runs are blocked by SPEC-006.
-- SPEC-010 testing framework: the general harness and phase-specific harnesses
-  are implemented. The harness was updated to tolerate non-UTF-8 compiler
-  output.
+- SPEC-010 testing framework: complete. The general harness and phase-specific
+  harnesses are implemented, CI runs `make test`, and all codegen tests pass.
 - SPEC-011 compiler driver: CLI and emit passes work; executable generation is
   blocked by SPEC-006.
-- SPEC-010: test harness, directory layout, and representative tests are
-  implemented; tests currently skip because the compiler is a placeholder.

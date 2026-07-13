@@ -71,5 +71,4 @@ Define and implement how Helium programs and compiler passes are tested.
 - [x] The harness handles compiler output that is not valid UTF-8 by replacing
       undecodable bytes instead of crashing.
 - [x] `make test` invokes the phase-specific harnesses and the general harness.
-- [ ] CI invokes `make test` and sees all codegen tests pass. Blocked by the
-      SPEC-006 runtime linking issue; the harness itself is complete.
+- [x] CI invokes `make test` and sees all codegen tests pass.

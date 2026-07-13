@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'spec-*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential flex bison llvm-dev python3
+
+      - name: Verify LLVM setup
+        run: llvm-config --version
+
+      - name: Build
+        run: make clean && make all
+
+      - name: Test
+        run: make test
