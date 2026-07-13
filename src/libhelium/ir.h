@@ -79,6 +79,11 @@ struct helium_ir_function {
 	struct helium_type *ret_type;
 	struct helium_ir_block *body;
 	int is_foreign;
+	int is_closure;
+	char **capture_names;
+	struct helium_type **capture_types;
+	size_t capture_count;
+	size_t capture_capacity;
 	int line;
 	int col;
 };
@@ -121,6 +126,8 @@ enum helium_ir_instr_kind {
 	HELIUM_IR_INSTR_BINARY,
 	HELIUM_IR_INSTR_UNARY,
 	HELIUM_IR_INSTR_FSTRING,
+	HELIUM_IR_INSTR_CLOSURE_ALLOC,
+	HELIUM_IR_INSTR_CLOSURE_CALL,
 };
 
 struct helium_ir_match_arm {
@@ -254,6 +261,21 @@ struct helium_ir_instr {
 			size_t part_count;
 			size_t part_capacity;
 		} fstring;
+		struct {
+			char *func_name;
+			char **capture_names;
+			struct helium_ir_instr **capture_values;
+			size_t name_count;
+			size_t name_capacity;
+			size_t value_count;
+			size_t value_capacity;
+		} closure_alloc;
+		struct {
+			struct helium_ir_instr *closure;
+			struct helium_ir_instr **args;
+			size_t arg_count;
+			size_t arg_capacity;
+		} closure_call;
 	} u;
 };
 
@@ -275,6 +297,9 @@ void helium_ir_function_add_param(struct helium_ir_function *func,
 				  struct helium_ir_param *param);
 void helium_ir_function_set_body(struct helium_ir_function *func,
 				 struct helium_ir_block *body);
+void helium_ir_function_add_capture(struct helium_ir_function *func,
+				    const char *name,
+				    struct helium_type *type);
 void helium_ir_function_free(struct helium_ir_function *func);
 
 struct helium_ir_param *helium_ir_param_new(const char *name,
@@ -389,6 +414,16 @@ void helium_ir_fstring_add_text(struct helium_ir_instr *fstring,
 				const char *text, int line, int col);
 void helium_ir_fstring_add_expr(struct helium_ir_instr *fstring,
 				struct helium_ir_instr *expr);
+struct helium_ir_instr *helium_ir_instr_closure_alloc(const char *func_name,
+				      int line, int col);
+void helium_ir_closure_alloc_add_capture(struct helium_ir_instr *alloc,
+					 const char *name,
+					 struct helium_ir_instr *value);
+struct helium_ir_instr *helium_ir_instr_closure_call(
+				struct helium_ir_instr *closure,
+				int line, int col);
+void helium_ir_closure_call_add_arg(struct helium_ir_instr *call,
+				    struct helium_ir_instr *arg);
 void helium_ir_instr_free(struct helium_ir_instr *instr);
 
 struct helium_ir_let_binding *helium_ir_let_binding_new(const char *name,
