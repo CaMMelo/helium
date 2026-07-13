@@ -33,6 +33,7 @@ char *hel_get_executable_dir(void);
 char *hel_read_file(const char *path);
 int hel_write_file(const char *path, const char *contents);
 int hel_copy_file(const char *src, const char *dst);
+int hel_copy_file_binary(const char *src, const char *dst);
 
 /*
  * String helpers.

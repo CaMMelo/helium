@@ -216,6 +216,35 @@ int hel_copy_file(const char *src, const char *dst)
 	return 0;
 }
 
+int hel_copy_file_binary(const char *src, const char *dst)
+{
+	FILE *fs;
+	FILE *fd;
+	char buf[4096];
+	size_t n;
+	int rc = -1;
+
+	fs = fopen(src, "rb");
+	if (!fs)
+		return -1;
+	fd = fopen(dst, "wb");
+	if (!fd) {
+		fclose(fs);
+		return -1;
+	}
+	while ((n = fread(buf, 1, sizeof(buf), fs)) > 0) {
+		if (fwrite(buf, 1, n, fd) != n)
+			goto out;
+	}
+	if (ferror(fs))
+		goto out;
+	rc = 0;
+out:
+	fclose(fs);
+	fclose(fd);
+	return rc;
+}
+
 char *hel_trim(char *s)
 {
 	char *end;

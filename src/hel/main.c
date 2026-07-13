@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "compiler.h"
+#include "modules.h"
 #include "lock.h"
 #include "manifest.h"
 #include "util.h"
@@ -166,19 +167,19 @@ static void collect_cache_paths(const char *cache_root,
 	closedir(d);
 }
 
-static const char **build_module_paths(const char *root, const char *project_lib,
+static const char **build_module_paths(const char *extra_path,
 				       const struct cache_path_list *cache)
 {
 	const char **paths;
-	size_t count = 3 + cache->count;
+	size_t count = (extra_path ? 1 : 0) + cache->count;
 	size_t i;
 
 	paths = hel_xalloc((count + 1) * sizeof(*paths));
-	paths[0] = root;
-	paths[1] = project_lib;
+	if (extra_path)
+		paths[0] = extra_path;
 	for (i = 0; i < cache->count; i++)
-		paths[2 + i] = cache->paths[i];
-	paths[2 + cache->count] = NULL;
+		paths[(extra_path ? 1 : 0) + i] = cache->paths[i];
+	paths[count] = NULL;
 	return paths;
 }
 
@@ -187,12 +188,302 @@ static void free_module_paths(const char **paths)
 	free(paths);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Local library compilation and installation                                 */
+/* -------------------------------------------------------------------------- */
+
+struct local_module {
+	char *source_path;
+	char *rel_path;
+	char *pkg;
+	char *name;
+	char *build_obj;
+	char *build_hei;
+	char *cache_dir;
+};
+
+struct local_module_list {
+	struct local_module *modules;
+	size_t count;
+	size_t capacity;
+};
+
+static char *replace_extension(const char *path, const char *new_ext)
+{
+	const char *dot = strrchr(path, '.');
+	char *out;
+
+	if (!dot)
+		return hel_xstrdup(new_ext);
+	if (asprintf(&out, "%.*s%s", (int)(dot - path), path, new_ext) < 0)
+		abort();
+	return out;
+}
+
+static char *cache_file_path(const char *cache_dir, const char *name,
+			     const char *ext)
+{
+	char *out;
+
+	if (asprintf(&out, "%s/%s%s", cache_dir, name, ext) < 0)
+		abort();
+	return out;
+}
+
+static void local_module_list_add(struct local_module_list *list,
+				  const char *source_path,
+				  const char *rel_path,
+				  const char *pkg,
+				  const char *name,
+				  const char *build_obj,
+				  const char *build_hei,
+				  const char *cache_dir)
+{
+	struct local_module *m;
+
+	if (list->count == list->capacity) {
+		size_t newcap = list->capacity ? list->capacity * 2 : 4;
+
+		list->modules = hel_xrealloc(list->modules,
+					     newcap * sizeof(*list->modules));
+		list->capacity = newcap;
+	}
+	m = &list->modules[list->count++];
+	memset(m, 0, sizeof(*m));
+	m->source_path = hel_xstrdup(source_path);
+	m->rel_path = hel_xstrdup(rel_path);
+	m->pkg = hel_xstrdup(pkg);
+	m->name = hel_xstrdup(name);
+	m->build_obj = hel_xstrdup(build_obj);
+	m->build_hei = hel_xstrdup(build_hei);
+	m->cache_dir = hel_xstrdup(cache_dir);
+}
+
+static void local_module_list_free(struct local_module_list *list)
+{
+	size_t i;
+
+	for (i = 0; i < list->count; i++) {
+		struct local_module *m = &list->modules[i];
+
+		free(m->source_path);
+		free(m->rel_path);
+		free(m->pkg);
+		free(m->name);
+		free(m->build_obj);
+		free(m->build_hei);
+		free(m->cache_dir);
+	}
+	free(list->modules);
+}
+
+static void scan_lib_dir_recursive(const char *lib_dir, const char *rel_prefix,
+				   const char *build_lib_dir,
+				   const char *cache_root,
+				   const char *version,
+				   struct local_module_list *list)
+{
+	DIR *d;
+	struct dirent *ent;
+
+	d = opendir(lib_dir);
+	if (!d)
+		return;
+
+	while ((ent = readdir(d)) != NULL) {
+		char *full_path;
+		char *rel_path;
+		char *build_obj;
+		char *build_hei;
+		char *cache_dir;
+		char *name;
+		char *pkg;
+		const char *dot;
+
+		if (ent->d_name[0] == '.')
+			continue;
+
+		full_path = hel_path_join(lib_dir, ent->d_name);
+		if (rel_prefix && rel_prefix[0]) {
+			rel_path = hel_path_join(rel_prefix, ent->d_name);
+		} else {
+			rel_path = hel_xstrdup(ent->d_name);
+		}
+
+		if (hel_is_dir(full_path)) {
+			scan_lib_dir_recursive(full_path, rel_path, build_lib_dir,
+					       cache_root, version, list);
+			free(rel_path);
+			free(full_path);
+			continue;
+		}
+
+		dot = strrchr(ent->d_name, '.');
+		if (!dot || strcmp(dot, ".hel") != 0) {
+			free(rel_path);
+			free(full_path);
+			continue;
+		}
+
+		name = hel_xstrndup(ent->d_name, dot - ent->d_name);
+		{
+			const char *slash = strchr(rel_path, '/');
+
+			pkg = slash ? hel_xstrndup(rel_path, slash - rel_path)
+				    : hel_xstrdup(name);
+		}
+
+		build_obj = hel_path_join(build_lib_dir,
+					  replace_extension(rel_path, ".o"));
+		build_hei = hel_path_join(build_lib_dir,
+					  replace_extension(rel_path, ".hei"));
+		cache_dir = hel_path_join(cache_root, pkg);
+		{
+			char *tmp = cache_dir;
+
+			cache_dir = hel_path_join(tmp, version);
+			free(tmp);
+		}
+
+		local_module_list_add(list, full_path, rel_path, pkg, name,
+				      build_obj, build_hei, cache_dir);
+
+		free(name);
+		free(pkg);
+		free(build_obj);
+		free(build_hei);
+		free(cache_dir);
+		free(rel_path);
+		free(full_path);
+	}
+	closedir(d);
+}
+
+static int ensure_dir(const char *path)
+{
+	char *dir = hel_dirname(path);
+	int rc = hel_mkdir_p(dir);
+
+	free(dir);
+	return rc;
+}
+
+static int install_local_module(const struct local_module *m, char **error)
+{
+	char *cache_hel;
+	char *cache_hei;
+	char *cache_obj;
+	int rc = 0;
+
+	if (hel_mkdir_p(m->cache_dir) != 0) {
+		if (error) {
+			*error = hel_xstrdup("cannot create cache directory");
+		}
+		return -1;
+	}
+
+	cache_hel = cache_file_path(m->cache_dir, m->name, ".hel");
+	cache_hei = cache_file_path(m->cache_dir, m->name, ".hei");
+	cache_obj = cache_file_path(m->cache_dir, m->name, ".o");
+
+	if (hel_copy_file(m->source_path, cache_hel) != 0 ||
+	    hel_copy_file(m->build_hei, cache_hei) != 0 ||
+	    hel_copy_file_binary(m->build_obj, cache_obj) != 0) {
+		if (error)
+			*error = hel_xstrdup("failed to install local module");
+		rc = -1;
+	}
+
+	free(cache_hel);
+	free(cache_hei);
+	free(cache_obj);
+	return rc;
+}
+
+static int compile_local_modules(const char *root, const char *version,
+				 char **error)
+{
+	char *lib_dir = hel_path_join(root, "lib");
+	char *build_lib_dir = hel_path_join(root, "build/lib");
+	char *cache_root = hel_path_join(root, ".helium");
+	struct local_module_list list = { NULL, 0, 0 };
+	struct cache_path_list cache = { NULL, 0, 0 };
+	const char **module_paths;
+	size_t i;
+	int rc = 0;
+
+	if (!hel_is_dir(lib_dir)) {
+		free(lib_dir);
+		free(build_lib_dir);
+		free(cache_root);
+		return 0;
+	}
+
+	scan_lib_dir_recursive(lib_dir, NULL, build_lib_dir, cache_root,
+			       version, &list);
+
+	/*
+	 * Copy source stubs into .helium/ first so that later module
+	 * compilations can resolve imports of other local libraries.
+	 */
+	for (i = 0; i < list.count; i++) {
+		struct local_module *m = &list.modules[i];
+		char *cache_hel = cache_file_path(m->cache_dir, m->name, ".hel");
+
+		if (hel_mkdir_p(m->cache_dir) != 0 ||
+		    hel_copy_file(m->source_path, cache_hel) != 0) {
+			if (error)
+				*error = hel_xstrdup("failed to stage local module");
+			free(cache_hel);
+			rc = -1;
+			goto out;
+		}
+		free(cache_hel);
+	}
+
+	collect_cache_paths(cache_root, &cache);
+	module_paths = build_module_paths(lib_dir, &cache);
+
+	for (i = 0; i < list.count && rc == 0; i++) {
+		struct local_module *m = &list.modules[i];
+		struct helium_module_interface *iface = NULL;
+
+		if (ensure_dir(m->build_obj) != 0 || ensure_dir(m->build_hei) != 0) {
+			if (error)
+				*error = hel_xstrdup("cannot create build/lib directory");
+			rc = -1;
+			break;
+		}
+
+		if (helium_compile_module(m->source_path, m->build_obj, m->build_hei,
+					  module_paths, &iface, error) != 0) {
+			rc = -1;
+			break;
+		}
+		if (iface)
+			helium_module_interface_free(iface);
+
+		if (install_local_module(m, error) != 0) {
+			rc = -1;
+			break;
+		}
+	}
+
+	free_module_paths(module_paths);
+	cache_path_list_free(&cache);
+out:
+	local_module_list_free(&list);
+	free(lib_dir);
+	free(build_lib_dir);
+	free(cache_root);
+	return rc;
+}
+
 static int run_compiler(const char *root, const char *src,
 			const char *out)
 {
 	char *cc = compiler_path();
 	char *repo = repo_root();
-	char *project_lib = hel_path_join(root, "lib");
 	char *cache_root = hel_path_join(root, ".helium");
 	char *runtime_src = hel_path_join(repo, "src/runtime/helium_runtime.c");
 	struct cache_path_list cache = { NULL, 0, 0 };
@@ -205,14 +496,13 @@ static int run_compiler(const char *root, const char *src,
 		fprintf(stderr, "error: compiler not found: %s\n", cc);
 		free(cc);
 		free(repo);
-		free(project_lib);
 		free(cache_root);
 		free(runtime_src);
 		return 1;
 	}
 
 	collect_cache_paths(cache_root, &cache);
-	module_paths = build_module_paths(root, project_lib, &cache);
+	module_paths = build_module_paths(NULL, &cache);
 
 	memset(&opts, 0, sizeof(opts));
 	opts.output_path = out;
@@ -228,7 +518,6 @@ static int run_compiler(const char *root, const char *src,
 	cache_path_list_free(&cache);
 	free(cc);
 	free(repo);
-	free(project_lib);
 	free(cache_root);
 	free(runtime_src);
 	return rc;
@@ -240,6 +529,7 @@ static int build_project(const char *root, const struct hel_manifest *m,
 	char *src = hel_path_join(root, "src/main.hel");
 	char *build_dir = hel_path_join(root, "build");
 	char *out = hel_path_join(build_dir, m->name);
+	char *error = NULL;
 	int rc;
 
 	(void)l;
@@ -252,6 +542,14 @@ static int build_project(const char *root, const struct hel_manifest *m,
 	}
 	if (hel_mkdir_p(build_dir) != 0) {
 		fprintf(stderr, "error: cannot create build directory\n");
+		free(src);
+		free(build_dir);
+		free(out);
+		return 1;
+	}
+	if (compile_local_modules(root, m->version, &error) != 0) {
+		fprintf(stderr, "error: %s\n", error ? error : "failed to compile local modules");
+		free(error);
 		free(src);
 		free(build_dir);
 		free(out);
@@ -685,7 +983,7 @@ static int cmd_init(int argc, char *argv[], int *idx)
 	write_default_file(root, "src/main.hel",
 			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
 	write_default_file(root, "lib/math.hel",
-			   "module math;\n\n/* Local module skeleton. */\n");
+			   "module math;\n\nadd = (a: i32, b: i32): i32 { a + b };\n");
 	write_default_file(root, "tests/smoke_test.hel",
 			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
 	write_default_file(root, ".env", "# Local development environment variables.\n");
