@@ -17,8 +17,8 @@ From the repository root:
 
 `make test` also invokes the harness.
 
-In the future `hel test` will invoke `tests/run_tests.py` directly and propagate
-its exit status.
+`hel test` invokes `tests/run_tests.py` with `--project <project-root>` so that
+a project's own tests are discovered and run.
 
 ## Directory layout
 
@@ -135,10 +135,16 @@ and checks the exit status and output/error patterns.
 
 ## Skipped tests
 
-While the bootstrap compiler and package manager are still placeholders, tests
-that require a real compiler are reported as `SKIP`.  Skipped tests do not count
-as failures.  Once the relevant tool is implemented, the same tests will run and
-produce `PASS` or `FAIL`.
+Tests in phases that have dedicated harnesses (`lexer`, `parser`, `type`,
+`mono`) are reported as `SKIP` by the general harness because they are already
+covered by their phase-specific runners. Tests may also be skipped explicitly
+with the `@skip` metadata key. Skipped tests do not count as failures.
+
+## Known limitations
+
+The general harness expects compiler output to be mostly UTF-8. Non-UTF-8 bytes
+are replaced with the Unicode replacement character so that the harness can
+continue to report `PASS`/`FAIL` instead of crashing.
 
 ## Adding a new test
 

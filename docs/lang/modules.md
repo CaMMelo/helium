@@ -42,7 +42,8 @@ Foreign functions are declared with a foreign signature. The compiler emits the
 necessary calling-convention glue. From the caller's perspective, a foreign
 function is an ordinary Helium function.
 
-Example (syntax to be finalized):
+Foreign functions are declared with the `foreign` keyword, a name, a colon, and
+a Helium function type:
 
 ```helium
 foreign puts : fn(str) -> i32;
