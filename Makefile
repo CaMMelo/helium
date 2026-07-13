@@ -74,7 +74,7 @@ $(BIN_DIR)/helium: $(HELIUM_OBJS) $(BUILD_DIR)/libhelium.a
 # Package manager
 $(BIN_DIR)/hel: $(HEL_OBJS) $(BUILD_DIR)/libhelium.a
 	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@ $(LLVM_LIBS)
 
 # Runtime objects
 $(BUILD_DIR)/runtime: $(RUNTIME_OBJS)
