@@ -513,14 +513,16 @@ out:
 	return rc;
 }
 
-static int cmd_run(void)
+static int cmd_run(int argc, char *argv[], int idx)
 {
 	char *root = project_root();
 	char *manifest_path = hel_path_join(root, MANIFEST_NAME);
 	char *error = NULL;
 	struct hel_manifest *m;
 	char *binary;
-	char *argv[2];
+	char **run_argv;
+	int run_argc;
+	int i;
 	int rc;
 
 	rc = cmd_build();
@@ -549,9 +551,16 @@ static int cmd_run(void)
 		rc = 1;
 		goto out;
 	}
-	argv[0] = binary;
-	argv[1] = NULL;
-	rc = run_command(root, argv);
+
+	run_argc = 1 + (argc - idx);
+	run_argv = hel_xalloc((run_argc + 1) * sizeof(*run_argv));
+	run_argv[0] = binary;
+	for (i = idx; i < argc; i++)
+		run_argv[1 + (i - idx)] = argv[i];
+	run_argv[run_argc] = NULL;
+
+	rc = run_command(root, run_argv);
+	free(run_argv);
 out:
 	hel_manifest_free(m);
 	free(binary);
@@ -934,7 +943,7 @@ int main(int argc, char *argv[])
 	if (strcmp(cmd, "build") == 0)
 		return cmd_build();
 	if (strcmp(cmd, "run") == 0)
-		return cmd_run();
+		return cmd_run(argc, argv, idx);
 	if (strcmp(cmd, "test") == 0)
 		return cmd_test();
 	if (strcmp(cmd, "add") == 0) {
