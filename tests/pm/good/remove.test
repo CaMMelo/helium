@@ -1,0 +1,5 @@
+# @name remove_dependency
+# @phase pm
+# @expect success
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; cd "$tmp/pkg" || exit 1; mkdir -p .helium/greet/0.1.0/interface; printf "module greet;\n" > .helium/greet/0.1.0/greet.hel; printf "module greet\n" > .helium/greet/0.1.0/interface/greet.hei; cc -c -x c /dev/null -o .helium/greet/0.1.0/greet.o 2>/dev/null; "$hel" add greet >>"$tmp/out.txt" 2>&1; "$hel" remove greet >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; ! grep -q "greet" Heliumfile && ! grep -q "greet" Heliumfile.lock; rc2=$?; exit $((rc || rc2))'
+# @match Removed greet

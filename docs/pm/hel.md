@@ -38,8 +38,9 @@ Creates a new Helium project with the following layout:
 Default files created by `init`:
 
 - `src/main.hel` containing a minimal `main`.
-- `lib/math.hel` containing a minimal module example.
+- `lib/math.hel` containing a minimal module skeleton.
 - `tests/smoke_test.hel` containing a minimal test entry point.
+- `tests/run_tests.py` copied from the bootstrap harness so `hel test` works out of the box.
 
 ### `hel build`
 
@@ -109,7 +110,9 @@ Dependencies are stored as compiled artifacts plus interface metadata:
 ```
 
 The compiler uses the interface files for type checking and the object/shared
-files for linking.
+files for linking. In the bootstrap implementation the cache must also contain
+a matching `.hel` source stub so the compiler can resolve the import path; the
+stub is not recompiled when the object and interface files are up to date.
 
 ## 5. Registries
 

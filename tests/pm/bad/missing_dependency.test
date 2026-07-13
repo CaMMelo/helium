@@ -1,0 +1,5 @@
+# @name missing_dependency
+# @phase pm
+# @expect error
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && "$hel" add ghost@9.9.9 >>"$tmp/out.txt" 2>&1 && "$hel" build >>"$tmp/out.txt" 2>&1); rc=$?; cat "$tmp/out.txt" 1>&2; exit $rc'
+# @match dependency not found|ghost@9\.9\.9

@@ -1,0 +1,5 @@
+# @name hel_test
+# @phase pm
+# @expect success
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && "$hel" test) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @match PASS

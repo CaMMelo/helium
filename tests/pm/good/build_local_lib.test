@@ -1,0 +1,5 @@
+# @name build_local_lib
+# @phase pm
+# @expect success
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { printf "import math\nforeign io_unit: IO<()>;\nmain: IO<()> = io_unit;\n" > src/main.hel; "$hel" build; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @match Built
