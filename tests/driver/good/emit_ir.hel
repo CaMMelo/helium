@@ -1,0 +1,11 @@
+// @name driver_emit_ir
+// @phase driver
+// @expect success
+// @command ./build/bin/helium --emit-ir tests/driver/good/emit_ir.hel
+// @match program
+
+import std.io
+
+main = () : IO<()> {
+    io.println("emit ir");
+}

@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "ast.h"
+#include "ast_printer.h"
 #include "codegen.h"
 #include "ffi.h"
 #include "inference.h"
@@ -23,12 +24,6 @@
 #include "mono.h"
 #include "parser.h"
 #include "token.h"
-
-struct compile_options {
-	const char *output_path;
-	const char *extra_libs;
-	int emit_llvm;
-};
 
 static void *xalloc(size_t size)
 {
@@ -172,19 +167,37 @@ static int parse_source(const char *source_path, struct helium_module **module,
 
 static int compile_module_source(const char *source_path,
 				 struct helium_import_context *parent_ctx,
+				 const char *const *module_paths,
 				 struct helium_module_interface **iface_out,
 				 char **error);
+
+static struct helium_search_path *build_search_path(const char *source_path,
+					    const char *const *module_paths)
+{
+	struct helium_search_path *sp;
+	size_t i;
+
+	sp = helium_search_path_for_project(source_path, NULL);
+	if (!sp)
+		return NULL;
+
+	for (i = 0; module_paths && module_paths[i]; i++)
+		helium_search_path_add(sp, module_paths[i]);
+
+	return sp;
+}
 
 static int collect_imports(struct helium_module *module,
 			   const char *source_path,
 			   struct helium_import_context *ctx,
+			   const char *const *module_paths,
 			   char **error)
 {
 	struct helium_search_path *sp;
 	size_t i;
 	int rc = -1;
 
-	sp = helium_search_path_for_project(source_path, error);
+	sp = build_search_path(source_path, module_paths);
 	if (!sp)
 		return -1;
 
@@ -217,8 +230,8 @@ static int collect_imports(struct helium_module *module,
 		} else {
 			struct helium_module_interface *dep_iface;
 
-			if (compile_module_source(source, ctx, &dep_iface,
-						  error) < 0)
+			if (compile_module_source(source, ctx, module_paths,
+						  &dep_iface, error) < 0)
 				goto out;
 			info->iface = dep_iface;
 		}
@@ -236,6 +249,7 @@ out:
 
 static int compile_module_source(const char *source_path,
 				 struct helium_import_context *parent_ctx,
+				 const char *const *module_paths,
 				 struct helium_module_interface **iface_out,
 				 char **error)
 {
@@ -256,7 +270,7 @@ static int compile_module_source(const char *source_path,
 		return -1;
 
 	ctx = helium_import_context_new();
-	if (collect_imports(module, source_path, ctx, error) < 0)
+	if (collect_imports(module, source_path, ctx, module_paths, error) < 0)
 		goto out;
 
 	module_name = module->name ? xstrdup(module->name) :
@@ -409,6 +423,43 @@ static void inject_imported_decls(struct helium_module *module,
 /* Linking                                                                    */
 /* -------------------------------------------------------------------------- */
 
+static char *build_extra_libs(const struct helium_compile_options *opts)
+{
+	char *result = NULL;
+	char *tmp;
+	size_t i;
+
+	if (opts->extra_libs && opts->extra_libs[0]) {
+		result = xstrdup(opts->extra_libs);
+	}
+
+	for (i = 0; opts->lib_paths && opts->lib_paths[i]; i++) {
+		if (result) {
+			if (asprintf(&tmp, "%s -L%s", result, opts->lib_paths[i]) < 0)
+				abort();
+			free(result);
+			result = tmp;
+		} else {
+			if (asprintf(&result, "-L%s", opts->lib_paths[i]) < 0)
+				abort();
+		}
+	}
+
+	for (i = 0; opts->libs && opts->libs[i]; i++) {
+		if (result) {
+			if (asprintf(&tmp, "%s -l%s", result, opts->libs[i]) < 0)
+				abort();
+			free(result);
+			result = tmp;
+		} else {
+			if (asprintf(&result, "-l%s", opts->libs[i]) < 0)
+				abort();
+		}
+	}
+
+	return result;
+}
+
 static int run_linker(const char *obj_path, const char *output_path,
 		      const char *extra_libs,
 		      struct helium_import_context *ctx, char **error)
@@ -506,8 +557,8 @@ out:
 
 static int compile_program(struct helium_module *module,
 			   const char *source_path,
-			   const char *output_path,
-			   const char *extra_libs, char **error)
+			   const struct helium_compile_options *opts,
+			   char **error)
 {
 	struct helium_typed_module *typed = NULL;
 	struct helium_ir_program *prog = NULL;
@@ -516,10 +567,13 @@ static int compile_program(struct helium_module *module,
 	char *heliumfile;
 	char *link_flags = NULL;
 	char *combined_libs = NULL;
+	char *extra_libs = NULL;
 	int rc = -1;
 
+	extra_libs = build_extra_libs(opts);
+
 	ctx = helium_import_context_new();
-	if (collect_imports(module, source_path, ctx, error) < 0)
+	if (collect_imports(module, source_path, ctx, opts->module_paths, error) < 0)
 		goto out;
 
 	helium_rewrite_qualified_access(module, ctx);
@@ -532,8 +586,8 @@ static int compile_program(struct helium_module *module,
 	if (!prog)
 		goto out;
 
-	obj_path = xalloc(strlen(output_path) + 5);
-	sprintf(obj_path, "%s.o", output_path);
+	obj_path = xalloc(strlen(opts->output_path) + 5);
+	sprintf(obj_path, "%s.o", opts->output_path);
 
 	if (helium_codegen_program(prog, obj_path, error) < 0)
 		goto out;
@@ -556,11 +610,12 @@ static int compile_program(struct helium_module *module,
 		combined_libs = xstrdup(link_flags);
 	}
 
-	if (run_linker(obj_path, output_path, combined_libs, ctx, error) < 0)
+	if (run_linker(obj_path, opts->output_path, combined_libs, ctx, error) < 0)
 		goto out;
 
 	rc = 0;
 out:
+	free(extra_libs);
 	free(combined_libs);
 	free(link_flags);
 	if (obj_path) {
@@ -578,13 +633,136 @@ out:
 int helium_compile_file(const char *source_path, const char *output_path,
 			const char *extra_libs, char **error)
 {
+	struct helium_compile_options opts = {
+		.output_path = output_path,
+		.extra_libs = extra_libs,
+	};
+
+	return helium_compile(source_path, &opts, error);
+}
+
+int helium_compile(const char *source_path,
+		   const struct helium_compile_options *opts, char **error)
+{
 	struct helium_module *module;
+	int rc;
+
+	if (!opts || !opts->output_path) {
+		format_error(error, "output path is required");
+		return -1;
+	}
+
+	if (parse_source(source_path, &module, error) < 0)
+		return -1;
+
+	rc = compile_program(module, source_path, opts, error);
+	helium_module_free(module);
+	return rc;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Emit passes                                                                */
+/* -------------------------------------------------------------------------- */
+
+int helium_emit_ast(const char *source_path, FILE *out, char **error)
+{
+	struct helium_module *module = NULL;
 	int rc;
 
 	if (parse_source(source_path, &module, error) < 0)
 		return -1;
 
-	rc = compile_program(module, source_path, output_path, extra_libs, error);
+	helium_ast_print(out, module);
+	rc = ferror(out) ? -1 : 0;
+	if (rc < 0)
+		format_error(error, "failed to write AST output");
+
 	helium_module_free(module);
+	return rc;
+}
+
+int helium_emit_ir(const char *source_path, FILE *out,
+		   const char *const *module_paths, char **error)
+{
+	struct helium_module *module = NULL;
+	struct helium_typed_module *typed = NULL;
+	struct helium_import_context *ctx = NULL;
+	struct helium_ir_program *prog = NULL;
+	int rc = -1;
+
+	if (parse_source(source_path, &module, error) < 0)
+		return -1;
+
+	ctx = helium_import_context_new();
+	if (collect_imports(module, source_path, ctx, module_paths, error) < 0)
+		goto out;
+
+	helium_rewrite_qualified_access(module, ctx);
+	inject_imported_decls(module, ctx);
+
+	if (helium_infer_module(module, &typed, error) < 0)
+		goto out;
+
+	prog = helium_monomorphize(typed, error);
+	if (!prog)
+		goto out;
+
+	helium_ir_program_print(prog, out);
+	rc = ferror(out) ? -1 : 0;
+	if (rc < 0)
+		format_error(error, "failed to write IR output");
+
+out:
+	if (prog)
+		helium_ir_program_free(prog);
+	if (typed)
+		helium_typed_module_free(typed);
+	if (module)
+		helium_module_free(module);
+	helium_import_context_free(ctx);
+	return rc;
+}
+
+int helium_emit_llvm(const char *source_path, FILE *out,
+		     const char *const *module_paths, char **error)
+{
+	struct helium_module *module = NULL;
+	struct helium_typed_module *typed = NULL;
+	struct helium_import_context *ctx = NULL;
+	struct helium_ir_program *prog = NULL;
+	int rc = -1;
+
+	if (parse_source(source_path, &module, error) < 0)
+		return -1;
+
+	ctx = helium_import_context_new();
+	if (collect_imports(module, source_path, ctx, module_paths, error) < 0)
+		goto out;
+
+	helium_rewrite_qualified_access(module, ctx);
+	inject_imported_decls(module, ctx);
+
+	if (helium_infer_module(module, &typed, error) < 0)
+		goto out;
+
+	prog = helium_monomorphize(typed, error);
+	if (!prog)
+		goto out;
+
+	if (helium_codegen_program_ir(prog, out, error) < 0)
+		goto out;
+
+	rc = ferror(out) ? -1 : 0;
+	if (rc < 0)
+		format_error(error, "failed to write LLVM IR output");
+
+out:
+	if (prog)
+		helium_ir_program_free(prog);
+	if (typed)
+		helium_typed_module_free(typed);
+	if (module)
+		helium_module_free(module);
+	helium_import_context_free(ctx);
 	return rc;
 }

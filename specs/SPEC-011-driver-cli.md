@@ -23,15 +23,18 @@ Implement the `helium` compiler executable used by `hel` and developers.
 
 1. Command-line interface:
    ```
-   helium <file.hel>         # compile to executable
-   helium --emit-ast ...     # print AST
-   helium --emit-ir ...      # print monomorphic IR
-   helium --emit-llvm ...    # print LLVM IR
-   helium -o <name> ...      # output name
-   helium -I <path> ...      # add module search path
-   helium -L <path> ...      # add library search path
-   helium -l <lib> ...       # link library
+   helium <file.hel>              # compile to executable
+   helium <file.hel> -o <name>    # specify output name
+   helium --emit-ast <file.hel>   # print AST
+   helium --emit-ir <file.hel>    # print monomorphic IR
+   helium --emit-llvm <file.hel>  # print LLVM IR
+   helium -I <path> ...           # add module search path
+   helium -L <path> ...           # add library search path
+   helium -l <lib> ...            # link library
+   helium -v / --version          # print version
    ```
+   When no output name is given, the executable name is the input file with
+   the `.hel` extension removed.
 2. The driver orchestrates lexer, parser, type checker, monomorphizer, and code
    generator.
 3. It reports errors with file, line, and column.
@@ -40,7 +43,7 @@ Implement the `helium` compiler executable used by `hel` and developers.
 
 ## Acceptance criteria
 
-- [ ] `helium src/main.hel` produces an executable.
-- [ ] `--emit-ast`, `--emit-ir`, and `--emit-llvm` produce readable output.
-- [ ] Errors are located and actionable.
-- [ ] The package manager can invoke the driver without issues.
+- [x] `helium src/main.hel` produces an executable.
+- [x] `--emit-ast`, `--emit-ir`, and `--emit-llvm` produce readable output.
+- [x] Errors are located and actionable.
+- [x] The package manager can invoke the driver without issues.

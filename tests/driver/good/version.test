@@ -1,0 +1,5 @@
+# @name driver_version
+# @phase driver
+# @expect success
+# @command ./build/bin/helium --version
+# @match Helium compiler version

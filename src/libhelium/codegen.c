@@ -1393,6 +1393,45 @@ static int emit_object_file(LLVMModuleRef module, const char *path,
 	return 0;
 }
 
+static int build_module(struct helium_ir_program *prog,
+			struct cg_ctx *ctx, LLVMModuleRef module,
+			LLVMContextRef context, LLVMBuilderRef builder,
+			char **error)
+{
+	size_t i;
+
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->ctx = context;
+	ctx->module = module;
+	ctx->builder = builder;
+	ctx->prog = prog;
+	ctx->error = error;
+	ctx->ptr_type = LLVMPointerType(LLVMInt8TypeInContext(context), 0);
+	ctx->i8_type = LLVMInt8TypeInContext(context);
+	ctx->i32_type = LLVMInt32TypeInContext(context);
+	ctx->i64_type = LLVMInt64TypeInContext(context);
+
+	for (i = 0; i < prog->function_count; i++)
+		declare_function(ctx, prog->functions[i]);
+
+	for (i = 0; i < prog->function_count; i++) {
+		if (codegen_function(ctx, prog->functions[i]) < 0)
+			return -1;
+	}
+
+	if (prog->main_name && emit_main_wrapper(ctx) < 0) {
+		format_error(error, "failed to emit main wrapper");
+		return -1;
+	}
+
+	if (LLVMVerifyModule(module, LLVMAbortProcessAction, NULL)) {
+		format_error(error, "LLVM module verification failed");
+		return -1;
+	}
+
+	return 0;
+}
+
 int helium_codegen_program(struct helium_ir_program *prog,
 			   const char *output_path, char **error)
 {
@@ -1400,52 +1439,50 @@ int helium_codegen_program(struct helium_ir_program *prog,
 	LLVMModuleRef module;
 	LLVMContextRef context;
 	LLVMBuilderRef builder;
-	size_t i;
-	int rc = 0;
+	int rc;
 
 	context = LLVMContextCreate();
 	module = LLVMModuleCreateWithNameInContext("helium", context);
 	builder = LLVMCreateBuilderInContext(context);
 
-	memset(&ctx, 0, sizeof(ctx));
-	ctx.ctx = context;
-	ctx.module = module;
-	ctx.builder = builder;
-	ctx.prog = prog;
-	ctx.error = error;
-	ctx.ptr_type = LLVMPointerType(LLVMInt8TypeInContext(context), 0);
-	ctx.i8_type = LLVMInt8TypeInContext(context);
-	ctx.i32_type = LLVMInt32TypeInContext(context);
-	ctx.i64_type = LLVMInt64TypeInContext(context);
+	rc = build_module(prog, &ctx, module, context, builder, error);
+	if (rc == 0)
+		rc = emit_object_file(module, output_path, error);
 
-	for (i = 0; i < prog->function_count; i++)
-		declare_function(&ctx, prog->functions[i]);
+	if (ctx.bindings)
+		free(ctx.bindings);
+	LLVMDisposeBuilder(builder);
+	LLVMDisposeModule(module);
+	LLVMContextDispose(context);
+	return rc;
+}
 
-	for (i = 0; i < prog->function_count; i++) {
-		if (codegen_function(&ctx, prog->functions[i]) < 0) {
+int helium_codegen_program_ir(struct helium_ir_program *prog, FILE *out,
+			      char **error)
+{
+	struct cg_ctx ctx;
+	LLVMModuleRef module;
+	LLVMContextRef context;
+	LLVMBuilderRef builder;
+	char *ir;
+	int rc;
+
+	context = LLVMContextCreate();
+	module = LLVMModuleCreateWithNameInContext("helium", context);
+	builder = LLVMCreateBuilderInContext(context);
+
+	rc = build_module(prog, &ctx, module, context, builder, error);
+	if (rc == 0) {
+		ir = LLVMPrintModuleToString(module);
+		if (!ir) {
+			format_error(error, "failed to print LLVM IR");
 			rc = -1;
-			goto out;
+		} else {
+			fputs(ir, out);
+			LLVMDisposeMessage(ir);
 		}
 	}
 
-	if (prog->main_name && emit_main_wrapper(&ctx) < 0) {
-		format_error(error, "failed to emit main wrapper");
-		rc = -1;
-		goto out;
-	}
-
-	if (LLVMVerifyModule(module, LLVMAbortProcessAction, NULL)) {
-		format_error(error, "LLVM module verification failed");
-		rc = -1;
-		goto out;
-	}
-
-	if (emit_object_file(module, output_path, error) < 0) {
-		rc = -1;
-		goto out;
-	}
-
-out:
 	if (ctx.bindings)
 		free(ctx.bindings);
 	LLVMDisposeBuilder(builder);
