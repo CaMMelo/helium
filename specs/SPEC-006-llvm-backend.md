@@ -33,22 +33,18 @@ Generate LLVM IR and native code from the monomorphic IR.
 
 ## Acceptance criteria
 
-- [ ] A Helium program with arithmetic and conditionals compiles and runs.
-      Currently blocked by a runtime linking bug: `helium file.hel -o bin` fails
-      while invoking the system C compiler to compile the runtime.
+- [x] A Helium program with arithmetic and conditionals compiles and runs.
+      Covered by `tests/codegen/good/generic_recursive.hel`.
 - [ ] Recursive functions do not overflow the stack when tail-recursive.
-      Pending the linking fix.
-- [ ] Closures capture and use environment correctly. Pending the linking fix.
-- [ ] Reference counting frees unused values. Pending the linking fix.
+      Only `recur`/`loop` tail calls are marked; ordinary function calls still
+      need tail-call optimization.
+- [ ] Closures capture and use environment correctly. Closure allocation is not
+      yet emitted by the backend (`helium_alloc_closure` is unused).
+- [x] Reference counting frees unused values. `helium_release` is emitted for
+      owned heap values at scope exit and for discarded temporaries. Verified
+      leak-free under valgrind for records, arrays, and variants
+      (`tests/codegen/good/record_no_leak.hel`, `record_alloc.hel`, `hello.hel`).
 - [x] The compiler produces LLVM IR from a `.hel` file (`--emit-llvm`).
 - [x] The compiler prints a monomorphic IR representation (`--emit-ir`).
-- [ ] The compiler produces a native executable from a `.hel` file. Pending the
-      linking fix.
-
-## Known issues
-
-- The final link step in `src/libhelium/compiler.c` passes a corrupted runtime
-  object path to the system C compiler, causing linking to fail with a message
-  such as `linker input file unused because linking not done`. This prevents
-  all end-to-end codegen tests from producing executables. The AST, IR, and
-  LLVM IR emission paths are unaffected.
+- [x] The compiler produces a native executable from a `.hel` file. End-to-end
+      codegen tests compile, link, and run successfully.

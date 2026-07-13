@@ -1,0 +1,24 @@
+// @name record_no_leak
+// @phase codegen
+// @expect success
+// @note Verified leak-free with valgrind: 4 allocs / 4 frees for 3 iterations.
+
+import std.io
+
+type Point = { x: i32, y: i32 };
+
+make_point = (n: i32): IO<()> {
+    p = Point{ x: n, y: n + 1 };
+    io.println("tick")
+};
+
+rec_points = (n: i32): IO<()> {
+    if (n == 0) {
+        io.println("done")
+    } else {
+        make_point(n);
+        rec_points(n - 1)
+    }
+};
+
+main = rec_points(3)
