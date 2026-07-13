@@ -1,0 +1,9 @@
+// @name generic_identity
+// @phase codegen
+// @expect success
+
+foreign io_unit: IO<()>;
+
+identity = <T>(x: T): T { x };
+
+main = identity(io_unit);

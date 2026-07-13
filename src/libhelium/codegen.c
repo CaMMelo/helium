@@ -764,10 +764,13 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	cond = codegen_instr(ctx, instr->u.if_expr.cond);
 	if (!cond)
 		return NULL;
-	if (LLVMGetTypeKind(LLVMTypeOf(cond)) != LLVMIntegerTypeKind)
+	if (LLVMGetTypeKind(LLVMTypeOf(cond)) != LLVMIntegerTypeKind ||
+	    LLVMGetIntTypeWidth(LLVMTypeOf(cond)) != 1) {
+		LLVMTypeRef cond_type = LLVMTypeOf(cond);
 		cond = LLVMBuildICmp(ctx->builder, LLVMIntNE, cond,
-				     LLVMConstInt(LLVMTypeOf(cond), 0, 0),
+				     LLVMConstInt(cond_type, 0, 0),
 				     "cond");
+	}
 
 	in_loop = ctx->current_func && ctx->current_func->loop_fn != NULL;
 
