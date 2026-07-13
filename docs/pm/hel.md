@@ -37,9 +37,9 @@ Creates a new Helium project with the following layout:
 
 Default files created by `init`:
 
-- `src/main.hel` containing a minimal `main` that imports `std.io` and prints a greeting.
+- `src/main.hel` containing a minimal `main` that returns a no-op `IO<()>` action without importing any external module.
 - `lib/math.hel` containing a minimal module skeleton.
-- `tests/smoke_test.hel` containing a minimal runnable codegen test that imports `std.io` and prints a greeting.
+- `tests/smoke_test.hel` containing a minimal runnable codegen test that returns a no-op `IO<()>` action without importing any external module.
 
 `hel init` does not copy the test harness into the project.  `hel test` invokes the repository's `tests/run_tests.py` directly, passing the project directory with `--project`.
 
@@ -55,8 +55,11 @@ Steps:
 3. Invoke the Helium compiler with module search paths for:
    - the project root,
    - the project's `lib/` directory,
-   - the repository's `lib/` directory (so `import std.io` works),
    - each versioned directory under the project's `.helium/` cache.
+
+   The repository's own `lib/` directory is **not** included automatically; any
+   standard library modules such as `std.io` must be added to the project
+   explicitly (for example under the project's `lib/` or into `.helium/`).
 4. Link the resulting objects and any required `.so`/`.o` dependencies.
 5. Place the final binary in `build/`.
 
