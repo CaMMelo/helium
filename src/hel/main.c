@@ -683,7 +683,7 @@ static int cmd_init(int argc, char *argv[], int *idx)
 	write_default_file(root, "lib/math.hel",
 			   "module math;\n\n/* Local module skeleton. */\n");
 	write_default_file(root, "tests/smoke_test.hel",
-			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
+			   "import std.io\n\nmain = () : IO<()> {\n    io.println(\"Smoke test passed\");\n}\n");
 	write_default_file(root, ".env", "# Local development environment variables.\n");
 
 	snprintf(manifest, sizeof(manifest),
