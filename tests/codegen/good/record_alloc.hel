@@ -1,0 +1,12 @@
+// @name record_alloc
+// @phase codegen
+// @expect success
+
+import std.io
+
+type Point = { x: i32, y: i32 };
+
+main = () : IO<()> {
+    p = Point{ x: 1, y: 2 };
+    io.println("ok")
+}

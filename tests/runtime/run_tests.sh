@@ -1,23 +1,11 @@
 #!/bin/bash
 # Runtime test runner for SPEC-005.
+#
+# Usage: ./run_tests.sh <path-to-test_runtime>
 
 set -e
 
-cd "$(dirname "$0")/../.."
-
-BUILD_DIR="build"
-TEST_BIN="$BUILD_DIR/test_runtime"
-RUNTIME_OBJ="$BUILD_DIR/obj/runtime/helium_runtime.o"
-
-CC=${CC:-gcc}
-CFLAGS="-Wall -Wextra -std=c11 -O2 -g"
-
-make -s
-
-mkdir -p "$BUILD_DIR"
-
-$CC $CFLAGS -Isrc/runtime tests/runtime/test_runtime.c \
-    "$RUNTIME_OBJ" -o "$TEST_BIN"
+TEST_BIN="${1:-../../build/test_runtime}"
 
 echo "Running test_runtime..."
 "$TEST_BIN"
