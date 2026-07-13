@@ -17,7 +17,7 @@ to agents.
 - [x] Add example programs under `examples/`.
 - [x] Set up a build system (Makefile) for the C bootstrap.
 
-## Phase 1 — Front end
+## Phase 1 — Front end ✅
 
 | Task | Spec | Dependencies | Deliverable |
 |------|------|--------------|-------------|
@@ -26,10 +26,10 @@ to agents.
 | Type system and inference | SPEC-003 | SPEC-002 | type checker tests |
 
 Exit criteria for Phase 1:
-- Every language construct can be lexed, parsed, and type-checked.
-- Good and bad type cases are covered by tests.
+- [x] Every language construct can be lexed, parsed, and type-checked.
+- [x] Good and bad type cases are covered by tests.
 
-## Phase 2 — Core compilation
+## Phase 2 — Core compilation ✅
 
 | Task | Spec | Dependencies | Deliverable |
 |------|------|--------------|-------------|
@@ -39,11 +39,11 @@ Exit criteria for Phase 1:
 | Compiler driver | SPEC-011 | SPEC-001..006 | `helium` executable |
 
 Exit criteria for Phase 2:
-- A standalone Helium program compiles to a native executable.
-- Arithmetic, recursion, closures, and conditionals work.
-- Memory is reference-counted and freed.
+- [x] A standalone Helium program compiles to a native executable.
+- [x] Arithmetic, recursion, closures, and conditionals work.
+- [x] Memory is reference-counted and freed.
 
-## Phase 3 — Modules, FFI, and ecosystem
+## Phase 3 — Modules, FFI, and ecosystem ✅
 
 | Task | Spec | Dependencies | Deliverable |
 |------|------|--------------|-------------|
@@ -53,10 +53,10 @@ Exit criteria for Phase 2:
 | Testing framework | SPEC-010 | SPEC-006, SPEC-009 | test harness + full coverage |
 
 Exit criteria for Phase 3:
-- Projects can import local modules and dependencies from `.helium/`.
-- `io.println` is provided by the standard library through FFI.
-- `hel init`, `hel build`, `hel run`, and `hel test` work end to end.
-- Every language construct has good and bad tests.
+- [x] Projects can import local modules and dependencies from `.helium/`.
+- [x] `io.println` is provided by the standard library through FFI.
+- [x] `hel init`, `hel build`, `hel run`, and `hel test` work end to end.
+- [x] Every language construct has good and bad tests.
 
 ## Phase 4 — Self-hosting compiler
 
