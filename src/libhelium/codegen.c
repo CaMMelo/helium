@@ -830,9 +830,11 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	else_bb = LLVMAppendBasicBlockInContext(ctx->ctx,
 						ctx->current_func->func,
 						"else");
-	merge_bb = LLVMAppendBasicBlockInContext(ctx->ctx,
-						 ctx->current_func->func,
-						 "merge");
+	if (!in_loop) {
+		merge_bb = LLVMAppendBasicBlockInContext(ctx->ctx,
+							 ctx->current_func->func,
+							 "merge");
+	}
 
 	LLVMBuildCondBr(ctx->builder, cond, then_bb, else_bb);
 
@@ -841,7 +843,7 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	if (in_loop && then_val &&
 	    !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildRet(ctx->builder, then_val);
-	else if (then_val &&
+	else if (!in_loop && then_val &&
 		 !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildBr(ctx->builder, merge_bb);
 
@@ -850,7 +852,7 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	if (in_loop && else_val &&
 	    !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildRet(ctx->builder, else_val);
-	else if (else_val &&
+	else if (!in_loop && else_val &&
 		 !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildBr(ctx->builder, merge_bb);
 
@@ -898,6 +900,14 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 static LLVMValueRef codegen_recur(struct cg_ctx *ctx,
 				  struct helium_ir_instr *instr);
 
+static LLVMTypeRef llvm_type_for_binding(struct cg_ctx *ctx,
+					 struct helium_ir_let_binding *binding)
+{
+	if (binding->type && binding->type->kind != HELIUM_TYPE_VAR)
+		return helium_type_to_llvm(ctx, binding->type);
+	return llvm_type_for_instr_type(ctx, binding->value);
+}
+
 static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 				 struct helium_ir_instr *instr)
 {
@@ -933,11 +943,18 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 	arg_values = xalloc(total_params * sizeof(*arg_values));
 
 	for (i = 0; i < loop_binding_count; i++)
-		param_types[i] = helium_type_to_llvm(ctx,
-						     instr->u.loop.bindings[i]->type);
-	for (i = 0; i < captured_count; i++)
-		param_types[loop_binding_count + i] =
-			helium_type_to_llvm(ctx, ctx->bindings[i].type);
+		param_types[i] = llvm_type_for_binding(ctx,
+						       instr->u.loop.bindings[i]);
+	for (i = 0; i < captured_count; i++) {
+		if (ctx->bindings[i].type &&
+		    ctx->bindings[i].type->kind != HELIUM_TYPE_VAR) {
+			param_types[loop_binding_count + i] =
+				helium_type_to_llvm(ctx, ctx->bindings[i].type);
+		} else {
+			param_types[loop_binding_count + i] =
+				LLVMTypeOf(ctx->bindings[i].value);
+		}
+	}
 
 	ret_type = llvm_type_for_instr_type(ctx, instr);
 	loop_fn_type = LLVMFunctionType(ret_type, param_types, total_params, 0);

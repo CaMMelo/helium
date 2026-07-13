@@ -34,7 +34,7 @@ Generate LLVM IR and native code from the monomorphic IR.
 ## Acceptance criteria
 
 - [x] A Helium program with arithmetic and conditionals compiles and runs.
-- [ ] Recursive functions do not overflow the stack when tail-recursive.
+- [x] Recursive functions do not overflow the stack when tail-recursive.
 - [ ] Closures capture and use environment correctly.
 - [ ] Reference counting frees unused values.
 - [x] The compiler produces LLVM IR from a `.hel` file (`--emit-llvm`).
