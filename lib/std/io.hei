@@ -1,4 +1,6 @@
 module io
 println : fn(str) -> IO<()>
 prints : fn(str) -> IO<()>
-printi : fn(i32) -> IO<()>
+print_int : fn(i32) -> IO<()>
+print_bool : fn(bool) -> IO<()>
+read_line : fn() -> IO<str>

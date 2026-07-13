@@ -1,0 +1,7 @@
+module string;
+
+foreign length : fn(str) -> i32;
+
+is_empty = (s: str): bool {
+    length(s) == 0
+};
