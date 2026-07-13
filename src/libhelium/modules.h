@@ -89,8 +89,10 @@ int helium_module_resolve(const char *import_path,
 
 /*
  * Build a search path for a project given the path to the entry source file.
- * Adds ancestor <dir>/lib directories and <dir>/.helium/<name>/<version>
- * cache entries, plus the current working directory's lib and cache.
+ * Adds only the source file's own directory and the .helium/<name>/<version>
+ * cache entries found next to the source file.  The compiler no longer walks
+ * ancestor directories or implicitly adds cwd/lib; callers must supply those
+ * via explicit module paths if desired.
  */
 struct helium_search_path *helium_search_path_for_project(
 					const char *source_path, char **error);

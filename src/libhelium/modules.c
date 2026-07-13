@@ -805,6 +805,36 @@ static char *import_path_to_file(const char *import_path)
 }
 
 /*
+ * If @root looks like a .helium/<package>/<version>/ directory, return the
+ * package name.  This lets module resolution strip the package prefix from
+ * imports such as "std.io" when searching inside the package cache.
+ */
+static char *package_root_prefix(const char *root)
+{
+	const char *helium = strstr(root, "/.helium/");
+	const char *pkg_start;
+	const char *slash;
+	const char *ver_start;
+	const char *ver_end;
+
+	if (!helium)
+		helium = root;
+	if (*helium == '/')
+		helium++;
+	if (strncmp(helium, ".helium/", 8) != 0)
+		return NULL;
+	pkg_start = helium + 8;
+	slash = strchr(pkg_start, '/');
+	if (!slash)
+		return NULL;
+	ver_start = slash + 1;
+	ver_end = strchr(ver_start, '/');
+	if (ver_end)
+		return NULL;
+	return strndup(pkg_start, slash - pkg_start);
+}
+
+/*
  * Return the last component of an import path as the namespace prefix.
  */
 static char *import_path_prefix(const char *import_path)
@@ -817,10 +847,10 @@ static char *import_path_prefix(const char *import_path)
 }
 
 int helium_module_resolve(const char *import_path,
-			  struct helium_search_path *sp,
-			  char **source_path,
-			  char **module_name,
-			  char **error)
+				  struct helium_search_path *sp,
+				  char **source_path,
+				  char **module_name,
+				  char **error)
 {
 	char *rel;
 	char *prefix;
@@ -830,7 +860,9 @@ int helium_module_resolve(const char *import_path,
 	prefix = import_path_prefix(import_path);
 
 	for (i = 0; i < sp->count; i++) {
-		char *candidate = path_join(sp->roots[i], rel);
+		const char *root = sp->roots[i];
+		char *candidate = path_join(root, rel);
+		char *pkg;
 
 		if (file_exists(candidate)) {
 			*source_path = candidate;
@@ -840,6 +872,35 @@ int helium_module_resolve(const char *import_path,
 			return 0;
 		}
 		free(candidate);
+
+		/*
+		 * If the search root is a .helium/<pkg>/<version>/ cache directory,
+		 * also try resolving imports of the form <pkg>.<name> directly as
+		 * <name>.hel inside that directory.
+		 */
+		pkg = package_root_prefix(root);
+		if (pkg) {
+			size_t pkg_len = strlen(pkg);
+
+			if (strncmp(import_path, pkg, pkg_len) == 0 &&
+			    import_path[pkg_len] == '.') {
+				char *stripped = import_path_to_file(import_path + pkg_len + 1);
+				char *candidate2 = path_join(root, stripped);
+
+				if (file_exists(candidate2)) {
+					*source_path = candidate2;
+					*module_name = xstrdup(prefix);
+					free(pkg);
+					free(stripped);
+					free(prefix);
+					free(rel);
+					return 0;
+				}
+				free(candidate2);
+				free(stripped);
+			}
+			free(pkg);
+		}
 	}
 
 	format_error(error, "module not found: %s", import_path);
@@ -888,57 +949,34 @@ static void add_cache_versions(struct helium_search_path *sp,
 	closedir(d);
 }
 
-static void add_ancestors(struct helium_search_path *sp, const char *path)
-{
-	char *copy = xstrdup(path);
-	char *p;
-
-	for (;;) {
-		char *lib_dir = path_join(copy, "lib");
-		char *cache_dir = path_join(copy, ".helium");
-
-		helium_search_path_add(sp, lib_dir);
-		add_cache_versions(sp, cache_dir);
-		free(lib_dir);
-		free(cache_dir);
-
-		p = strrchr(copy, '/');
-		if (!p || p == copy)
-			break;
-		*p = '\0';
-	}
-	free(copy);
-}
-
 struct helium_search_path *helium_search_path_for_project(
-					const char *source_path, char **error)
+						const char *source_path, char **error)
 {
 	struct helium_search_path *sp;
 	char *root;
 	char *cache_root;
-	char cwd[4096];
 	const char *last_slash;
 
 	(void)error;
 
 	sp = helium_search_path_new();
 
+	/*
+	 * The source file's own directory is always searched so that relative
+	 * imports within the same directory work without extra flags.
+	 */
 	last_slash = strrchr(source_path, '/');
 	if (last_slash)
 		root = strndup(source_path, last_slash - source_path);
 	else
 		root = xstrdup(".");
+	helium_search_path_add(sp, root);
 
-	add_ancestors(sp, root);
-
-	if (getcwd(cwd, sizeof(cwd))) {
-		char *lib_dir = path_join(cwd, "lib");
-
-		helium_search_path_add(sp, lib_dir);
-		free(lib_dir);
-		add_ancestors(sp, cwd);
-	}
-
+	/*
+	 * Cached dependencies and locally-installed libraries live under the
+	 * project's .helium/<name>/<version>/ directories.  The compiler does not
+	 * walk ancestor directories or implicitly add cwd/lib.
+	 */
 	cache_root = path_join(root, ".helium");
 	add_cache_versions(sp, cache_root);
 	free(cache_root);

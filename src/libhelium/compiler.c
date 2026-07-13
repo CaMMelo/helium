@@ -166,6 +166,8 @@ static int parse_source(const char *source_path, struct helium_module **module,
 /* -------------------------------------------------------------------------- */
 
 static int compile_module_source(const char *source_path,
+				 const char *object_path,
+				 const char *interface_path,
 				 struct helium_import_context *parent_ctx,
 				 const char *const *module_paths,
 				 struct helium_module_interface **iface_out,
@@ -230,8 +232,8 @@ static int collect_imports(struct helium_module *module,
 		} else {
 			struct helium_module_interface *dep_iface;
 
-			if (compile_module_source(source, ctx, module_paths,
-						  &dep_iface, error) < 0)
+			if (compile_module_source(source, object, iface, ctx,
+						  module_paths, &dep_iface, error) < 0)
 				goto out;
 			info->iface = dep_iface;
 		}
@@ -248,6 +250,8 @@ out:
 }
 
 static int compile_module_source(const char *source_path,
+				 const char *object_path,
+				 const char *interface_path,
 				 struct helium_import_context *parent_ctx,
 				 const char *const *module_paths,
 				 struct helium_module_interface **iface_out,
@@ -258,8 +262,6 @@ static int compile_module_source(const char *source_path,
 	struct helium_ir_program *prog = NULL;
 	struct helium_import_context *ctx = NULL;
 	struct helium_module_interface *iface = NULL;
-	char *object_path;
-	char *interface_path;
 	char *module_name;
 	int rc = -1;
 
@@ -287,31 +289,26 @@ static int compile_module_source(const char *source_path,
 	}
 
 	helium_rewrite_qualified_access(module, ctx);
-	helium_rewrite_qualified_access(module, parent_ctx);
+	if (parent_ctx)
+		helium_rewrite_qualified_access(module, parent_ctx);
 
 	if (helium_infer_module_no_main(module, &typed, error) < 0)
 		goto out;
 
-	object_path = replace_extension(source_path, ".o");
-	interface_path = replace_extension(source_path, ".hei");
 
 	if (helium_module_interface_emit(module, typed->env, interface_path,
 					 error) < 0) {
-		free(object_path);
-		free(interface_path);
 		free(module_name);
 		goto out;
 	}
 
 	iface = helium_module_interface_load(interface_path, error);
 	if (!iface) {
-		free(object_path);
-		free(interface_path);
 		free(module_name);
 		goto out;
 	}
 	iface->source_path = xstrdup(source_path);
-	iface->object_path = object_path;
+	iface->object_path = xstrdup(object_path);
 
 	helium_typed_module_free(typed);
 	typed = NULL;
@@ -319,23 +316,17 @@ static int compile_module_source(const char *source_path,
 	helium_prefix_module_names(module, module_name);
 
 	if (helium_infer_module_no_main(module, &typed, error) < 0) {
-		free(object_path);
-		free(interface_path);
 		free(module_name);
 		goto out;
 	}
 
 	prog = helium_monomorphize_module(typed, error);
 	if (!prog) {
-		free(object_path);
-		free(interface_path);
 		free(module_name);
 		goto out;
 	}
 
 	if (helium_codegen_program(prog, object_path, error) < 0) {
-		free(object_path);
-		free(interface_path);
 		free(module_name);
 		goto out;
 	}
@@ -348,7 +339,6 @@ static int compile_module_source(const char *source_path,
 	}
 	iface = NULL;
 
-	free(interface_path);
 	free(module_name);
 	rc = 0;
 out:
@@ -664,6 +654,29 @@ int helium_compile(const char *source_path,
 	rc = compile_program(module, source_path, opts, error);
 	helium_module_free(module);
 	return rc;
+}
+
+/*
+ * helium_compile_module - Compile a single Helium module to object + interface.
+ *
+ * @source_path: path to the module's .hel source file.
+ * @object_path: path where the compiled .o object file should be written.
+ * @interface_path: path where the .hei interface file should be written.
+ * @module_paths: extra search paths for imports, NULL-terminated.
+ * @iface_out: optional output for the loaded module interface.
+ * @error: set to a heap-allocated error message on failure.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int helium_compile_module(const char *source_path,
+                          const char *object_path,
+                          const char *interface_path,
+                          const char *const *module_paths,
+                          struct helium_module_interface **iface_out,
+                          char **error)
+{
+	return compile_module_source(source_path, object_path, interface_path,
+				     NULL, module_paths, iface_out, error);
 }
 
 /* -------------------------------------------------------------------------- */

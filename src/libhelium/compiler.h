@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 
+/* Forward declaration from modules.h */
+struct helium_module_interface;
+
 struct helium_compile_options {
 	const char *output_path;
 	const char *extra_libs;
@@ -41,6 +44,19 @@ int helium_compile_file(const char *source_path, const char *output_path,
  */
 int helium_compile(const char *source_path,
                    const struct helium_compile_options *opts, char **error);
+
+/*
+ * helium_compile_module - Compile a single Helium module to object + interface.
+ *
+ * Returns 0 on success, -1 on failure.  The resulting interface is optionally
+ * returned through @iface_out.
+ */
+int helium_compile_module(const char *source_path,
+                          const char *object_path,
+                          const char *interface_path,
+                          const char *const *module_paths,
+                          struct helium_module_interface **iface_out,
+                          char **error);
 
 /*
  * helium_emit_ast - Parse and print the AST for a Helium source file.
