@@ -36,10 +36,14 @@ Generate LLVM IR and native code from the monomorphic IR.
 - [x] A Helium program with arithmetic and conditionals compiles and runs.
 - [x] Recursive functions do not overflow the stack when tail-recursive.
 - [ ] Closures capture and use environment correctly.
-- [ ] Reference counting frees unused values.
+- [x] Reference counting frees unused values. `helium_release` is emitted for
+      owned heap values at scope exit and for discarded temporaries. Verified
+      leak-free under valgrind for records, arrays, and variants
+      (`tests/codegen/good/record_no_leak.hel`, `record_alloc.hel`, `hello.hel`).
 - [x] The compiler produces LLVM IR from a `.hel` file (`--emit-llvm`).
 - [x] The compiler prints a monomorphic IR representation (`--emit-ir`).
-- [x] The compiler produces a native executable from a `.hel` file.
+- [x] The compiler produces a native executable from a `.hel` file. End-to-end
+      codegen tests compile, link, and run successfully.
 
 ## Known issues
 
