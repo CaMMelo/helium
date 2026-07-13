@@ -14,6 +14,7 @@ struct helium_compile_options {
 	const char *const *module_paths; /* -I paths, NULL-terminated */
 	const char *const *lib_paths;    /* -L paths, NULL-terminated */
 	const char *const *libs;         /* -l libs, NULL-terminated */
+	const char *runtime_source_path; /* path to helium_runtime.c, may be NULL */
 };
 
 /*

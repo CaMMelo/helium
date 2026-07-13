@@ -24,6 +24,7 @@ from typing import Iterable, Optional
 ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = ROOT / "tests"
 COMPILER = ROOT / "build" / "bin" / "helium"
+PROJECT: Optional[Path] = None
 
 # Exit statuses
 EXIT_OK = 0
@@ -89,7 +90,13 @@ def _infer_expect(path: Path) -> str:
 
 
 def _infer_phase(path: Path) -> str:
-    rel = path.relative_to(TESTS_DIR)
+    try:
+        rel = path.relative_to(TESTS_DIR)
+    except ValueError:
+        try:
+            rel = path.relative_to(PROJECT / "tests")
+        except ValueError:
+            return "unknown"
     parts = rel.parts
     if len(parts) >= 2:
         return parts[0]
@@ -192,7 +199,7 @@ def _matches(value: Optional[str], pattern: Optional[str]) -> bool:
 
 def run_hel_test(test: Test) -> Result:
     cmd = shlex.split(test.command) if test.command else ["hel", "test"]
-    proc = _run_command([str(x) for x in cmd], cwd=ROOT)
+    proc = _run_command([str(x) for x in cmd], cwd=PROJECT or ROOT)
 
     if _compiler_is_placeholder(proc):
         return Result(test, "SKIP",
@@ -266,7 +273,7 @@ def run_helium_test(test: Test) -> Result:
                 return Result(test, "FAIL",
                               f"compile failed with exit {proc.returncode}",
                               proc.stdout, proc.stderr)
-            run_proc = _run_command([str(binary)], cwd=ROOT)
+            run_proc = _run_command([str(binary)], cwd=PROJECT or ROOT)
             return _check_command_result(test, run_proc)
 
         # Expected compile failure.
@@ -351,9 +358,19 @@ Examples:
                         help="show stdout/stderr for every test")
     parser.add_argument("--compiler", default=str(COMPILER),
                         help="path to the helium compiler")
+    parser.add_argument("--project", default=None,
+                        help="project directory for user-project tests")
     args = parser.parse_args(argv)
 
     COMPILER = Path(args.compiler)
+
+    if args.project:
+        global PROJECT
+        global TESTS_DIR
+        PROJECT = Path(args.project).resolve()
+        TESTS_DIR = PROJECT / "tests"
+    else:
+        TESTS_DIR = ROOT / "tests"
 
     if args.path:
         filter_path = Path(args.path).resolve()

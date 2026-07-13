@@ -462,10 +462,13 @@ static char *build_extra_libs(const struct helium_compile_options *opts)
 
 static int run_linker(const char *obj_path, const char *output_path,
 		      const char *extra_libs,
-		      struct helium_import_context *ctx, char **error)
+		      struct helium_import_context *ctx, char **error,
+		      const char *runtime_source_path)
 {
 	char runtime_obj[4096];
-	const char *runtime_src = "src/runtime/helium_runtime.c";
+	const char *runtime_src = runtime_source_path ?
+				  runtime_source_path :
+				  "src/runtime/helium_runtime.c";
 	pid_t pid;
 	int status;
 	size_t i;
@@ -610,7 +613,8 @@ static int compile_program(struct helium_module *module,
 		combined_libs = xstrdup(link_flags);
 	}
 
-	if (run_linker(obj_path, opts->output_path, combined_libs, ctx, error) < 0)
+	if (run_linker(obj_path, opts->output_path, combined_libs, ctx, error,
+		       opts->runtime_source_path) < 0)
 		goto out;
 
 	rc = 0;

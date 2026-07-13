@@ -37,6 +37,12 @@ Implement the `hel` command-line package manager.
 - `Heliumfile.lock` uses a TOML-like format with a `[package]` section and an
   `[[dependencies]]` table array. Each dependency records `name`, `version`, and
   a deterministic `checksum` of its interface files.
+- `hel init` does not copy `tests/run_tests.py` into the project; `hel test`
+  invokes the repository harness with `--project <project-root>`.
+- `hel build` does not create symlinks of `Heliumfile`, `Heliumfile.lock`, or
+  `.helium` inside `src/`.  Instead it invokes the compiler with explicit module
+  search paths covering the project root, project `lib/`, repository `lib/`, and
+  each versioned directory under `.helium/`.
 - In the bootstrap implementation, cached packages must also contain a `.hel`
   source stub alongside the compiled artifacts. The stub is required so the
   compiler can resolve the import path, but it is not recompiled when the
