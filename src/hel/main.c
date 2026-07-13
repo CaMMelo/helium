@@ -167,20 +167,18 @@ static void collect_cache_paths(const char *cache_root,
 }
 
 static const char **build_module_paths(const char *root, const char *project_lib,
-				       const char *repo_lib,
 				       const struct cache_path_list *cache)
 {
 	const char **paths;
-	size_t count = 4 + cache->count;
+	size_t count = 3 + cache->count;
 	size_t i;
 
 	paths = hel_xalloc((count + 1) * sizeof(*paths));
 	paths[0] = root;
 	paths[1] = project_lib;
-	paths[2] = repo_lib;
 	for (i = 0; i < cache->count; i++)
-		paths[3 + i] = cache->paths[i];
-	paths[3 + cache->count] = NULL;
+		paths[2 + i] = cache->paths[i];
+	paths[2 + cache->count] = NULL;
 	return paths;
 }
 
@@ -194,7 +192,6 @@ static int run_compiler(const char *root, const char *src,
 {
 	char *cc = compiler_path();
 	char *repo = repo_root();
-	char *repo_lib = hel_path_join(repo, "lib");
 	char *project_lib = hel_path_join(root, "lib");
 	char *cache_root = hel_path_join(root, ".helium");
 	char *runtime_src = hel_path_join(repo, "src/runtime/helium_runtime.c");
@@ -208,7 +205,6 @@ static int run_compiler(const char *root, const char *src,
 		fprintf(stderr, "error: compiler not found: %s\n", cc);
 		free(cc);
 		free(repo);
-		free(repo_lib);
 		free(project_lib);
 		free(cache_root);
 		free(runtime_src);
@@ -216,7 +212,7 @@ static int run_compiler(const char *root, const char *src,
 	}
 
 	collect_cache_paths(cache_root, &cache);
-	module_paths = build_module_paths(root, project_lib, repo_lib, &cache);
+	module_paths = build_module_paths(root, project_lib, &cache);
 
 	memset(&opts, 0, sizeof(opts));
 	opts.output_path = out;
@@ -232,7 +228,6 @@ static int run_compiler(const char *root, const char *src,
 	cache_path_list_free(&cache);
 	free(cc);
 	free(repo);
-	free(repo_lib);
 	free(project_lib);
 	free(cache_root);
 	free(runtime_src);
@@ -679,11 +674,11 @@ static int cmd_init(int argc, char *argv[], int *idx)
 	}
 
 	write_default_file(root, "src/main.hel",
-			   "import std.io\n\nmain = () : IO<()> {\n    io.println(\"Hello, Helium!\");\n}\n");
+			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
 	write_default_file(root, "lib/math.hel",
 			   "module math;\n\n/* Local module skeleton. */\n");
 	write_default_file(root, "tests/smoke_test.hel",
-			   "import std.io\n\nmain = () : IO<()> {\n    io.println(\"Smoke test passed\");\n}\n");
+			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
 	write_default_file(root, ".env", "# Local development environment variables.\n");
 
 	snprintf(manifest, sizeof(manifest),
