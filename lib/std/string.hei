@@ -1,3 +1,0 @@
-module string
-length : fn(str) -> i32
-is_empty : fn(str) -> bool

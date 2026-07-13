@@ -1,2 +1,0 @@
-module list
-length<T> : fn([T; 0]) -> i32
