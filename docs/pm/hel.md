@@ -39,7 +39,7 @@ Default files created by `init`:
 
 - `src/main.hel` containing a minimal `main` that imports `std.io` and prints a greeting.
 - `lib/math.hel` containing a minimal module skeleton.
-- `tests/smoke_test.hel` containing a minimal test entry point.
+- `tests/smoke_test.hel` containing a minimal runnable codegen test that imports `std.io` and prints a greeting.
 
 `hel init` does not copy the test harness into the project.  `hel test` invokes the repository's `tests/run_tests.py` directly, passing the project directory with `--project`.
 
