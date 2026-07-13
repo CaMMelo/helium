@@ -168,6 +168,13 @@ def _run_command(cmd: list[str], cwd: Optional[Path] = None,
     )
 
 
+def _compiler_repo_root(compiler: Path) -> Path:
+    """Return the directory that contains src/runtime for the compiler."""
+    resolved = compiler.resolve()
+    # build/bin/helium -> build/bin -> build -> repo root
+    return resolved.parent.parent.parent
+
+
 def _normalize_output(text: str) -> str:
     return text.rstrip("\n").replace("\r\n", "\n")
 
@@ -241,10 +248,14 @@ def run_helium_test(test: Test) -> Result:
         return _check_command_result(test, proc)
 
     # Normal compile-and-run flow.
+    # Run the compiler from its own repo root so that the hard-coded
+    # src/runtime/helium_runtime.c path is found.
     with tempfile.TemporaryDirectory(prefix="helium_test_") as tmp:
         binary = Path(tmp) / "a.out"
-        compile_cmd = [str(COMPILER), str(test.path), "-o", str(binary)]
-        proc = _run_command(compile_cmd, cwd=ROOT)
+        compile_cmd = [
+            str(COMPILER), str(test.path.resolve()), "-o", str(binary)
+        ]
+        proc = _run_command(compile_cmd, cwd=_compiler_repo_root(COMPILER))
 
         if _compiler_is_placeholder(proc):
             return Result(test, "SKIP",

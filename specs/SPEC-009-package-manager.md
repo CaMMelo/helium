@@ -26,18 +26,28 @@ Implement the `hel` command-line package manager.
 4. `hel test` builds the project if needed, discovers tests, and runs them.
    It reports pass/fail per test and exits non-zero on failure.
 5. `hel add <pkg>[@<version>]` adds a dependency and updates the lock file.
-5. `hel remove <pkg>` removes a dependency and updates the lock file.
-6. `hel update [pkg]` updates dependencies and the lock file.
-7. Dependencies are cached under `.helium/<name>/<version>/` as compiled
+6. `hel remove <pkg>` removes a dependency and updates the lock file.
+7. `hel update [pkg]` updates dependencies and the lock file.
+8. Dependencies are cached under `.helium/<name>/<version>/` as compiled
    artifacts plus `.hei` interface files.
-8. Provide offline fallbacks and clear errors for network failures.
+9. Provide offline fallbacks and clear errors for network failures.
+
+## Implementation notes
+
+- `Heliumfile.lock` uses a TOML-like format with a `[package]` section and an
+  `[[dependencies]]` table array. Each dependency records `name`, `version`, and
+  a deterministic `checksum` of its interface files.
+- In the bootstrap implementation, cached packages must also contain a `.hel`
+  source stub alongside the compiled artifacts. The stub is required so the
+  compiler can resolve the import path, but it is not recompiled when the
+  object and interface files are already up to date.
 
 ## Acceptance criteria
 
-- [ ] `hel init` produces the expected directory tree and default files.
-- [ ] `hel build` compiles a project with no dependencies.
-- [ ] `hel run` executes the compiled program.
-- [ ] `hel test` discovers and runs tests, reporting pass/fail.
-- [ ] Adding, removing, and updating dependencies updates `Heliumfile` and
+- [x] `hel init` produces the expected directory tree and default files.
+- [x] `hel build` compiles a project with no dependencies.
+- [x] `hel run` executes the compiled program.
+- [x] `hel test` discovers and runs tests, reporting pass/fail.
+- [x] Adding, removing, and updating dependencies updates `Heliumfile` and
       `Heliumfile.lock` correctly.
-- [ ] Error cases (missing dependency, lock mismatch) are reported clearly.
+- [x] Error cases (missing dependency, lock mismatch) are reported clearly.

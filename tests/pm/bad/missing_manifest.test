@@ -1,5 +1,5 @@
 # @name missing_manifest
 # @phase pm
 # @expect error
-# @command build/bin/hel build
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; cd "$tmp" && "$hel" build 2>err.txt; rc=$?; cat err.txt 1>&2; exit $rc'
 # @match Heliumfile|manifest|not found|error

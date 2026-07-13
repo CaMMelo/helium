@@ -1,0 +1,5 @@
+# @name lock_mismatch
+# @phase pm
+# @expect error
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && printf "\n[dependencies]\nghost = \"1.0.0\"\n" >> Heliumfile && "$hel" build >>"$tmp/out.txt" 2>&1); rc=$?; cat "$tmp/out.txt" 1>&2; exit $rc'
+# @match lock file is missing|lock mismatch|run 'hel update'
