@@ -1,0 +1,13 @@
+// @name array_index
+// @phase type
+// @expect success
+
+foreign io_unit: IO<()>;
+
+n = [1, 2, 3, 4, 5];
+i = n[3];
+
+s = ["a", "b", "c"];
+t = s[1];
+
+main = io_unit;

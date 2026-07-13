@@ -121,7 +121,7 @@ struct pf_pair {
 %left PLUS MINUS
 %left STAR SLASH PERCENT
 %precedence UPLUS UMINUS NOT
-%precedence CALL FIELD
+%precedence CALL FIELD INDEX
 %precedence PAREN_GROUP
 %precedence LAMBDA_BODY
 
@@ -836,6 +836,10 @@ primary_expr:
     {
 	$$ = helium_expr_field($1, $3, @2.first_line, @2.first_column);
 	free($3);
+    }
+|   primary_expr LBRACKET expr RBRACKET %prec INDEX
+    {
+	$$ = helium_expr_array_get($1, $3, @2.first_line, @2.first_column);
     }
 ;
 

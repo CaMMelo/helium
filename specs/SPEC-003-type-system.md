@@ -32,6 +32,7 @@ Implement type checking and inference for Helium.
    - loops and `recur`
    - function literals
    - record and array literals
+   - array indexing
 6. Enforce explicit type annotations when present.
 7. Special handling:
    - `main` must have type `IO<()>`.
@@ -46,6 +47,8 @@ Implement type checking and inference for Helium.
 - [x] `loop`/`recur` argument types match the loop bindings.
 - [x] `if` branches unify to a common type.
 - [x] Results are consumable by SPEC-004 (monomorphization).
+- [x] Array indexing requires an array base and an `i32` index, producing the
+      array's element type.
 
 ## Notes
 

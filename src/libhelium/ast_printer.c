@@ -293,6 +293,13 @@ static void print_expr(FILE *out, struct helium_expr *expr, int depth)
 		print_expr(out, expr->u.field.object, depth);
 		fprintf(out, " %s)", expr->u.field.name);
 		break;
+	case HELIUM_EXPR_ARRAY_GET:
+		fputs("(array_get ", out);
+		print_expr(out, expr->u.array_get.array, depth);
+		fputs(" ", out);
+		print_expr(out, expr->u.array_get.index, depth);
+		fputs(")", out);
+		break;
 	case HELIUM_EXPR_ANNOT:
 		fputs("(annot ", out);
 		print_expr(out, expr->u.annot.expr, depth);

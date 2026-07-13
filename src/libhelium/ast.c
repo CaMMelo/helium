@@ -462,6 +462,20 @@ struct helium_expr *helium_expr_field(struct helium_expr *object,
 	return expr;
 }
 
+struct helium_expr *helium_expr_array_get(struct helium_expr *array,
+				      struct helium_expr *index, int line,
+				      int col)
+{
+	struct helium_expr *expr = xalloc(sizeof(*expr));
+
+	expr->kind = HELIUM_EXPR_ARRAY_GET;
+	expr->line = line;
+	expr->col = col;
+	expr->u.array_get.array = array;
+	expr->u.array_get.index = index;
+	return expr;
+}
+
 struct helium_expr *helium_expr_annot(struct helium_expr *expr,
 				      struct helium_type *type, int line,
 				      int col)
@@ -637,6 +651,10 @@ void helium_expr_free(struct helium_expr *expr)
 	case HELIUM_EXPR_FIELD:
 		helium_expr_free(expr->u.field.object);
 		free(expr->u.field.name);
+		break;
+	case HELIUM_EXPR_ARRAY_GET:
+		helium_expr_free(expr->u.array_get.array);
+		helium_expr_free(expr->u.array_get.index);
 		break;
 	case HELIUM_EXPR_ANNOT:
 		helium_expr_free(expr->u.annot.expr);

@@ -72,6 +72,7 @@ enum helium_expr_kind {
 	HELIUM_EXPR_RECORD_LIT,
 	HELIUM_EXPR_ARRAY_LIT,
 	HELIUM_EXPR_FIELD,
+	HELIUM_EXPR_ARRAY_GET,
 	HELIUM_EXPR_ANNOT,
 	HELIUM_EXPR_BIND,
 	HELIUM_EXPR_RETURN,
@@ -166,6 +167,10 @@ struct helium_expr {
 			char *name;
 		} field;
 		struct {
+			struct helium_expr *array;
+			struct helium_expr *index;
+		} array_get;
+		struct {
 			struct helium_expr *expr;
 			struct helium_type *type;
 		} annot;
@@ -226,6 +231,9 @@ struct helium_expr *helium_expr_record_lit(const char *name, int line,
 struct helium_expr *helium_expr_array_lit(int line, int col);
 struct helium_expr *helium_expr_field(struct helium_expr *object,
 				      const char *name, int line, int col);
+struct helium_expr *helium_expr_array_get(struct helium_expr *array,
+				      struct helium_expr *index, int line,
+				      int col);
 struct helium_expr *helium_expr_annot(struct helium_expr *expr,
 				      struct helium_type *type, int line,
 				      int col);

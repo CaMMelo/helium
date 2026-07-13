@@ -1,0 +1,7 @@
+// @name array_index
+// @phase parser
+// @expect success
+
+n = [1, 2, 3, 4, 5];
+i = n[3];
+arg = args[0];

@@ -1,0 +1,18 @@
+// @name echo_args
+// @phase codegen
+// @expect success
+// @command sh -c 'rm -f /tmp/helium_echo_args && ./build/bin/helium tests/codegen/good/echo_args.hel -o /tmp/helium_echo_args && /tmp/helium_echo_args first second third'
+
+import std.io
+import std.list
+
+main = (args: [str]): IO<()> {
+    loop (i = 0, len = list.length(args)) {
+        if (i >= len) {
+            io.println("")
+        } else {
+            io.println(args[i]);
+            recur(i + 1, len)
+        }
+    }
+}

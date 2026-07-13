@@ -34,6 +34,7 @@ noted below:
    - function literals
    - record literals
    - array literals
+   - array indexing `expr[expr]`
    - type annotations `expr: Type`
    - monadic bind `expr >>= expr`
 6. **Foreign declarations** — `foreign name : Type;` and generic foreign
@@ -57,6 +58,7 @@ Nodes cover at minimum:
 - `Loop`, `Recur`
 - `Lambda` (function literal)
 - `RecordLiteral`, `ArrayLiteral`
+- `ArrayGet`
 - `Type`, `TypeParam`
 - `Bind` (monadic `>>=`)
 
@@ -123,8 +125,8 @@ Good-case tests cover modules, imports, record and ADT types, generic types,
 bindings with and without type annotations, foreign declarations, all literal
 kinds, identifiers, function calls, arithmetic/comparison/logical/monadic-bind
 operators, blocks, `if`/`else`, `match`, `loop`/`recur`, lambdas (including
-generic), record literals, array literals, type annotations, `return`, f-strings,
-and field access.
+generic), record literals, array literals, array indexing, type annotations,
+`return`, f-strings, and field access.
 
 Bad-case tests cover unbalanced braces, missing `else`, malformed type
 definitions, malformed record literals, malformed match arms/patterns, malformed

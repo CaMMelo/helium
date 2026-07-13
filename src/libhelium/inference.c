@@ -1458,6 +1458,47 @@ static int infer_expr(struct helium_expr *expr, struct infer_ctx *ctx,
 		return -1;
 	}
 
+	case HELIUM_EXPR_ARRAY_GET: {
+		struct helium_type *arr;
+		struct helium_type *arr_applied;
+		struct helium_type *idx;
+		struct helium_type *i32_type;
+
+		if (infer_expr(expr->u.array_get.array, ctx, &arr, error) < 0)
+			return -1;
+		arr_applied = helium_type_apply(ctx->subst, arr);
+		if (arr_applied->kind != HELIUM_TYPE_ARRAY) {
+			format_error(error,
+				     "%d:%d: array index on non-array type",
+				     expr->line, expr->col);
+			helium_type_free(arr);
+			helium_type_free(arr_applied);
+			return -1;
+		}
+		if (infer_expr(expr->u.array_get.index, ctx, &idx, error) < 0) {
+			helium_type_free(arr);
+			helium_type_free(arr_applied);
+			return -1;
+		}
+		i32_type = make_i32_type();
+		if (helium_type_unify(idx, i32_type, &ctx->subst, error) < 0) {
+			format_error(error,
+				     "%d:%d: array index must be i32",
+				     expr->line, expr->col);
+			helium_type_free(arr);
+			helium_type_free(arr_applied);
+			helium_type_free(idx);
+			helium_type_free(i32_type);
+			return -1;
+		}
+		helium_type_free(idx);
+		helium_type_free(i32_type);
+		*out = helium_type_copy(arr_applied->elem_type);
+		helium_type_free(arr);
+		helium_type_free(arr_applied);
+		goto done;
+	}
+
 	case HELIUM_EXPR_ANNOT: {
 		struct helium_type *inner;
 		struct helium_type *ann;
@@ -1987,6 +2028,10 @@ static void apply_subst_to_expr(struct helium_expr *expr,
 		break;
 	case HELIUM_EXPR_FIELD:
 		apply_subst_to_expr(expr->u.field.object, subst);
+		break;
+	case HELIUM_EXPR_ARRAY_GET:
+		apply_subst_to_expr(expr->u.array_get.array, subst);
+		apply_subst_to_expr(expr->u.array_get.index, subst);
 		break;
 	case HELIUM_EXPR_ANNOT:
 		apply_subst_to_type(&expr->u.annot.type, subst);

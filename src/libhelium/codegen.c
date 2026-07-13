@@ -817,11 +817,34 @@ static LLVMValueRef codegen_array_alloc(struct cg_ctx *ctx,
 	call_args[2] = LLVMConstPointerNull(ctx->ptr_type);
 	arr = LLVMBuildCall2(ctx->builder, ft, fn, call_args, 3, "arr");
 
-	for (i = 0; i < instr->u.array_alloc.item_count; i++) {
-		LLVMValueRef item = codegen_instr(ctx,
+	{
+		LLVMValueRef data_offset = LLVMConstInt(ctx->i64_type, 48, 0);
+		LLVMValueRef data_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type,
+					      arr, &data_offset, 1, "data");
+
+		for (i = 0; i < instr->u.array_alloc.item_count; i++) {
+			LLVMValueRef item = codegen_instr(ctx,
 						  instr->u.array_alloc.items[i]);
-		(void)item;
-		/* Element storage not yet implemented. */
+			LLVMValueRef slot_offset;
+			LLVMValueRef slot_ptr;
+			LLVMValueRef typed_slot;
+			LLVMTypeRef item_type;
+
+			if (!item)
+				return NULL;
+			slot_offset = LLVMConstInt(ctx->i64_type,
+						   (unsigned long long)(i * elem_size),
+						   0);
+			slot_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type,
+						 data_ptr, &slot_offset, 1,
+						 "slot");
+			item_type = llvm_type_for_instr_type(ctx,
+						     instr->u.array_alloc.items[i]);
+			typed_slot = LLVMBuildBitCast(ctx->builder, slot_ptr,
+						      LLVMPointerType(item_type, 0),
+						      "sp");
+			LLVMBuildStore(ctx->builder, item, typed_slot);
+		}
 	}
 	return arr;
 }
@@ -829,9 +852,45 @@ static LLVMValueRef codegen_array_alloc(struct cg_ctx *ctx,
 static LLVMValueRef codegen_array_get(struct cg_ctx *ctx,
 				      struct helium_ir_instr *instr)
 {
-	format_error(ctx->error, "%d:%d: array_get not yet implemented",
-		     instr->line, instr->col);
-	return NULL;
+	LLVMValueRef array = codegen_instr(ctx, instr->u.array_get.array);
+	LLVMValueRef index = codegen_instr(ctx, instr->u.array_get.index);
+	LLVMTypeRef elem_type;
+	LLVMValueRef data_offset;
+	LLVMValueRef data_ptr;
+	LLVMValueRef elem_size;
+	LLVMValueRef byte_offset;
+	LLVMValueRef elem_ptr;
+	LLVMValueRef typed_elem_ptr;
+	LLVMValueRef result;
+
+	if (!array || !index)
+		return NULL;
+
+	elem_type = llvm_type_for_instr_type(ctx, instr);
+	data_offset = LLVMConstInt(ctx->i64_type, 48, 0);
+	data_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, array,
+				 &data_offset, 1, "data");
+	elem_size = LLVMConstInt(ctx->i64_type, 8, 0);
+	if (LLVMGetTypeKind(LLVMTypeOf(index)) == LLVMIntegerTypeKind &&
+	    LLVMGetIntTypeWidth(LLVMTypeOf(index)) != 64)
+		index = LLVMBuildSExt(ctx->builder, index, ctx->i64_type, "idx64");
+	byte_offset = LLVMBuildMul(ctx->builder, index, elem_size, "off");
+	elem_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, data_ptr,
+				 &byte_offset, 1, "elem");
+	typed_elem_ptr = LLVMBuildBitCast(ctx->builder, elem_ptr,
+					  LLVMPointerType(elem_type, 0),
+					  "ep");
+	result = LLVMBuildLoad2(ctx->builder, elem_type, typed_elem_ptr,
+				"load");
+	if (elem_type == ctx->ptr_type) {
+		/* For str arrays the slot holds a helium_string_t*; extract
+		 * the C string pointer from &string->data.
+		 */
+		LLVMValueRef str_data_offset = LLVMConstInt(ctx->i64_type, 32, 0);
+		result = LLVMBuildGEP2(ctx->builder, ctx->i8_type, result,
+				       &str_data_offset, 1, "cstr");
+	}
+	return result;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -671,6 +671,15 @@ static void collect_captures(struct mono_ctx *ctx,
 				 capture_capacity);
 		break;
 
+	case HELIUM_EXPR_ARRAY_GET:
+		collect_captures(ctx, expr->u.array_get.array, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		collect_captures(ctx, expr->u.array_get.index, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
 	case HELIUM_EXPR_RETURN:
 		collect_captures(ctx, expr->u.ret.expr, bound, bound_count,
 				 captures, capture_types, capture_count,
@@ -1318,6 +1327,25 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 		instr = helium_ir_instr_record_get(object,
 					   expr->u.field.name,
 					   expr->line, expr->col);
+		instr->type = subst_type(expr->inferred_type, names, args,
+				       count);
+		return instr;
+	}
+
+	case HELIUM_EXPR_ARRAY_GET: {
+		struct helium_ir_instr *array;
+		struct helium_ir_instr *index;
+
+		array = translate_expr(ctx, expr->u.array_get.array, names, args,
+				       count, error);
+		if (!array)
+			return NULL;
+		index = translate_expr(ctx, expr->u.array_get.index, names, args,
+				       count, error);
+		if (!index)
+			return NULL;
+		instr = helium_ir_instr_array_get(array, index,
+					  expr->line, expr->col);
 		instr->type = subst_type(expr->inferred_type, names, args,
 				       count);
 		return instr;

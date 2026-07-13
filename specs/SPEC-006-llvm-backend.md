@@ -42,6 +42,8 @@ Generate LLVM IR and native code from the monomorphic IR.
       (`tests/codegen/good/record_no_leak.hel`, `record_alloc.hel`, `hello.hel`).
 - [x] The compiler produces LLVM IR from a `.hel` file (`--emit-llvm`).
 - [x] The compiler prints a monomorphic IR representation (`--emit-ir`).
+- [x] Array indexing lowers to a bounds-unchecked element load from the runtime
+      array's data area.
 - [x] The compiler produces a native executable from a `.hel` file. End-to-end
       codegen tests compile, link, and run successfully.
 

@@ -1,0 +1,11 @@
+// @name array_index
+// @phase codegen
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    n = [1, 2, 3, 4, 5];
+    io.print_int(n[3]);
+    io.println("")
+}

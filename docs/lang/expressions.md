@@ -104,7 +104,21 @@ Functions are first-class values.
 All binary and unary operators follow C precedence and associativity. The
 monadic bind operator `>>=` is left-associative and lower precedence than `||`.
 
-## 8. Invalid expressions
+## 8. Array indexing
+
+Arrays are indexed with postfix brackets. The index must be `i32`.
+
+```helium
+n = [1, 2, 3, 4, 5];
+i = n[3];
+
+arg = args[0];
+```
+
+Indexing is a postfix operation with the highest precedence, so `a[i] + b[j]`
+groups the index operations before the addition.
+
+## 9. Invalid expressions
 
 The compiler must reject:
 
