@@ -19,3 +19,5 @@ __pycache__/
 # Compiled library artifacts
 lib/**/*.o
 lib/**/*.so
+tests/mono/**/*.out
+tests/mono/**/*.err
