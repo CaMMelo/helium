@@ -1,0 +1,9 @@
+// @name native_executable
+// @phase codegen
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.println("native executable ok");
+}
