@@ -1215,7 +1215,7 @@ static LLVMValueRef codegen_fstring(struct cg_ctx *ctx,
 	LLVMValueRef snprintf_fn;
 	LLVMValueRef buf;
 	LLVMValueRef size;
-	LLVMValueRef call_args[4];
+	LLVMValueRef call_args[3 + 16];
 	LLVMValueRef call;
 	size_t i;
 	unsigned arg_count = 0;
