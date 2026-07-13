@@ -195,6 +195,12 @@ helium_alloc_closure(helium_generic_fn_t fn, void *env,
  * module's top-level names with the module name when emitting object code.
  */
 int64_t
+io_unit(void)
+{
+	return 0;
+}
+
+int64_t
 io_println(const char *s)
 {
 	puts(s ? s : "");
