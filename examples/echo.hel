@@ -8,12 +8,13 @@ import std.io
 import std.list
 
 main = (args: [str]): IO<()> {
-    loop (i = 0, len = list.length(args)) {
+    len = list.length(args);
+    loop (i = 0) {
         if (i >= len) {
             io.println("")
         } else {
             io.println(args[i]);
-            recur(i + 1, len)
+            recur(i + 1)
         }
     }
 }
