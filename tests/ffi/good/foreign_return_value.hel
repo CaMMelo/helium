@@ -1,0 +1,12 @@
+// @name foreign_return_value
+// @phase ffi
+// @expect success
+
+import std.io
+
+foreign strlen : fn(str) -> i32;
+
+main = () : IO<()> {
+    io.print_int(strlen("hello"));
+    io.println("");
+}

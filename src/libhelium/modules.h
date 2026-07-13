@@ -84,9 +84,9 @@ int helium_module_resolve(const char *import_path,
 			  char **error);
 
 /*
- * Build a search path for a project given the directory containing the
- * entry source file.  Adds <root>/lib and <cwd>/.helium/<name>/<version>
- * entries for each known package name found in the cache.
+ * Build a search path for a project given the path to the entry source file.
+ * Adds ancestor <dir>/lib directories and <dir>/.helium/<name>/<version>
+ * cache entries, plus the current working directory's lib and cache.
  */
 struct helium_search_path *helium_search_path_for_project(
 					const char *source_path, char **error);

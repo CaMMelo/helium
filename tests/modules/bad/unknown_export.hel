@@ -1,0 +1,9 @@
+// @name unknown_export
+// @phase modules
+// @expect error
+
+import std.io
+
+main = () : IO<()> {
+    io.does_not_exist("x")
+}
