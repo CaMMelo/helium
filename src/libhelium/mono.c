@@ -202,6 +202,21 @@ static struct helium_type *subst_type(struct helium_type *type,
 	return copy;
 }
 
+/* Return the lambda's annotated return type if present, otherwise the return
+ * type inferred for the lambda expression.  This matters because a lambda with
+ * no `: <type>` annotation leaves u.lambda.ret_type NULL even though inference
+ * has computed the correct function type.
+ */
+static struct helium_type *lambda_ret_type(struct helium_expr *lambda)
+{
+	if (lambda->u.lambda.ret_type)
+		return lambda->u.lambda.ret_type;
+	if (lambda->inferred_type &&
+	    lambda->inferred_type->kind == HELIUM_TYPE_FN)
+		return lambda->inferred_type->ret;
+	return NULL;
+}
+
 /* Apply the current monomorphization substitution followed by the inference
  * substitution to obtain a concrete type for a call argument or return value.
  */
@@ -1162,7 +1177,7 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 		free(lambda_params);
 
 		func = helium_ir_function_new(buf,
-				      subst_type(expr->u.lambda.ret_type,
+				      subst_type(lambda_ret_type(expr),
 						 names, args, count),
 				      expr->line, expr->col);
 
@@ -1590,7 +1605,7 @@ static char *request_function(struct mono_ctx *ctx,
 	}
 
 	func = helium_ir_function_new(name,
-				      subst_type(lambda->u.lambda.ret_type,
+				      subst_type(lambda_ret_type(lambda),
 						 lambda->u.lambda.type_params,
 						 type_args, type_arg_count),
 				      binding->line, binding->col);

@@ -1,5 +1,5 @@
 program main=main
-function closure __lambda_0(__env: str) -> <?>
+function closure __lambda_0(__env: str) -> IO<()>
     block
         ident io_unit
 function main() -> IO<()>
