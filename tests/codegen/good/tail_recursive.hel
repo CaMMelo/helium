@@ -1,0 +1,19 @@
+// @name tail_recursive
+// @phase codegen
+// @expect success
+
+import std.io
+
+countdown = (n: i32): i32 {
+    loop (acc: i32 = 0, i: i32 = n) {
+        if (i == 0) {
+            acc
+        } else {
+            recur(acc + 1, i - 1)
+        }
+    }
+};
+
+main = () : IO<()> {
+    io.println(f"countdown(100000) = {countdown(100000)}")
+}
