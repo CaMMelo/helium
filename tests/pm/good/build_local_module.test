@@ -1,5 +1,5 @@
 # @name build_local_module
 # @phase pm
 # @expect success
-# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { printf "module math;\n\nadd = (a: i32, b: i32): i32 { a + b };\n" > lib/math.hel; printf "import std.io\nimport math\n\nmain = () : IO<()> {\n    io.print_int(math.add(2, 3));\n    io.println(\"\");\n}\n" > src/main.hel; "$hel" build; "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; repo=$(pwd); "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { mkdir -p lib/std; cp "$repo/lib/std/io.hel" "$repo/lib/std/io.hei" lib/std/; printf "module math;\n\nadd = (a: i32, b: i32): i32 { a + b };\n" > lib/math.hel; printf "import std.io\nimport math\n\nmain = () : IO<()> {\n    io.print_int(math.add(2, 3));\n    io.println(\"\");\n}\n" > src/main.hel; "$hel" build; "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
 # @match 5
