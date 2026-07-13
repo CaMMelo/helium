@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "compiler.h"
 #include "lock.h"
 #include "manifest.h"
 #include "util.h"
@@ -98,61 +99,155 @@ static int run_command(const char *cwd, char *const argv[])
 	return 1;
 }
 
+struct cache_path_list {
+	char **paths;
+	size_t count;
+	size_t capacity;
+};
+
+static void cache_path_list_add(struct cache_path_list *list, char *path)
+{
+	if (list->count == list->capacity) {
+		size_t newcap = list->capacity ? list->capacity * 2 : 4;
+		char **tmp = hel_xrealloc(list->paths,
+					  newcap * sizeof(char *));
+
+		list->paths = tmp;
+		list->capacity = newcap;
+	}
+	list->paths[list->count++] = path;
+}
+
+static void cache_path_list_free(struct cache_path_list *list)
+{
+	size_t i;
+
+	for (i = 0; i < list->count; i++)
+		free(list->paths[i]);
+	free(list->paths);
+}
+
+static void collect_cache_paths(const char *cache_root,
+				struct cache_path_list *list)
+{
+	DIR *d;
+	struct dirent *ent;
+
+	d = opendir(cache_root);
+	if (!d)
+		return;
+	while ((ent = readdir(d)) != NULL) {
+		char *pkg_dir;
+		DIR *pd;
+		struct dirent *vent;
+
+		if (ent->d_name[0] == '.')
+			continue;
+		pkg_dir = hel_path_join(cache_root, ent->d_name);
+		pd = opendir(pkg_dir);
+		if (!pd) {
+			free(pkg_dir);
+			continue;
+		}
+		while ((vent = readdir(pd)) != NULL) {
+			char *ver_dir;
+
+			if (vent->d_name[0] == '.')
+				continue;
+			ver_dir = hel_path_join(pkg_dir, vent->d_name);
+			if (hel_is_dir(ver_dir))
+				cache_path_list_add(list, ver_dir);
+			else
+				free(ver_dir);
+		}
+		closedir(pd);
+		free(pkg_dir);
+	}
+	closedir(d);
+}
+
+static const char **build_module_paths(const char *root, const char *project_lib,
+				       const char *repo_lib,
+				       const struct cache_path_list *cache)
+{
+	const char **paths;
+	size_t count = 4 + cache->count;
+	size_t i;
+
+	paths = hel_xalloc((count + 1) * sizeof(*paths));
+	paths[0] = root;
+	paths[1] = project_lib;
+	paths[2] = repo_lib;
+	for (i = 0; i < cache->count; i++)
+		paths[3 + i] = cache->paths[i];
+	paths[3 + cache->count] = NULL;
+	return paths;
+}
+
+static void free_module_paths(const char **paths)
+{
+	free(paths);
+}
+
 static int run_compiler(const char *root, const char *src,
 			const char *out)
 {
 	char *cc = compiler_path();
 	char *repo = repo_root();
-
-	(void)root;
-	char *argv[] = { cc, (char *)src, "-o", (char *)out, NULL };
+	char *repo_lib = hel_path_join(repo, "lib");
+	char *project_lib = hel_path_join(root, "lib");
+	char *cache_root = hel_path_join(root, ".helium");
+	char *runtime_src = hel_path_join(repo, "src/runtime/helium_runtime.c");
+	struct cache_path_list cache = { NULL, 0, 0 };
+	const char **module_paths;
+	struct helium_compile_options opts;
+	char *error = NULL;
 	int rc;
 
 	if (!hel_path_exists(cc)) {
 		fprintf(stderr, "error: compiler not found: %s\n", cc);
 		free(cc);
 		free(repo);
+		free(repo_lib);
+		free(project_lib);
+		free(cache_root);
+		free(runtime_src);
 		return 1;
 	}
-	rc = run_command(repo, argv);
+
+	collect_cache_paths(cache_root, &cache);
+	module_paths = build_module_paths(root, project_lib, repo_lib, &cache);
+
+	memset(&opts, 0, sizeof(opts));
+	opts.output_path = out;
+	opts.module_paths = module_paths;
+	opts.runtime_source_path = runtime_src;
+
+	rc = helium_compile(src, &opts, &error);
+	if (rc != 0) {
+		fprintf(stderr, "error: %s\n", error ? error : "compilation failed");
+		free(error);
+	}
+	free_module_paths(module_paths);
+	cache_path_list_free(&cache);
 	free(cc);
 	free(repo);
+	free(repo_lib);
+	free(project_lib);
+	free(cache_root);
+	free(runtime_src);
 	return rc;
-}
-
-static void ensure_src_symlink(const char *root, const char *src_dir,
-			       const char *name)
-{
-	char *target = hel_path_join(root, name);
-	char *link_path = hel_path_join(src_dir, name);
-
-	if (hel_path_exists(link_path))
-		goto out;
-	if (symlink(target, link_path) != 0 && errno != EEXIST) {
-		/* Non-fatal: compiler may not need this file. */
-	}
-out:
-	free(target);
-	free(link_path);
-}
-
-static void ensure_build_symlinks(const char *root, const char *src_dir)
-{
-	ensure_src_symlink(root, src_dir, MANIFEST_NAME);
-	ensure_src_symlink(root, src_dir, LOCK_NAME);
-	ensure_src_symlink(root, src_dir, ".helium");
 }
 
 static int build_project(const char *root, const struct hel_manifest *m,
 			 const struct hel_lock *l)
 {
 	char *src = hel_path_join(root, "src/main.hel");
-
-	(void)l;
 	char *build_dir = hel_path_join(root, "build");
 	char *out = hel_path_join(build_dir, m->name);
 	int rc;
 
+	(void)l;
 	if (!hel_path_exists(src)) {
 		fprintf(stderr, "error: src/main.hel not found\n");
 		free(src);
@@ -167,10 +262,11 @@ static int build_project(const char *root, const struct hel_manifest *m,
 		free(out);
 		return 1;
 	}
-	ensure_build_symlinks(root, "src");
 	rc = run_compiler(root, src, out);
-	if (rc == 0)
+	if (rc == 0) {
 		printf("Built %s\n", out);
+		fflush(stdout);
+	}
 	free(src);
 	free(build_dir);
 	free(out);
@@ -472,28 +568,35 @@ out:
 static int cmd_test(void)
 {
 	char *root = project_root();
-	char *script = hel_path_join(root, "tests/run_tests.py");
+	char *repo = repo_root();
+	char *script = hel_path_join(repo, "tests/run_tests.py");
 	char *cc = compiler_path();
-	char *argv[] = { "python3", script, "--compiler", cc, NULL };
+	char *argv[] = {
+		"python3", script, "--compiler", cc,
+		"--project", root, NULL
+	};
 	int rc;
 
 	rc = cmd_build();
 	if (rc != 0) {
 		free(cc);
 		free(script);
+		free(repo);
 		free(root);
 		return rc;
 	}
 	if (!hel_path_exists(script)) {
-		fprintf(stderr, "error: test harness not found: tests/run_tests.py\n");
+		fprintf(stderr, "error: test harness not found: %s\n", script);
 		free(cc);
 		free(script);
+		free(repo);
 		free(root);
 		return 1;
 	}
 	rc = run_command(root, argv);
 	free(cc);
 	free(script);
+	free(repo);
 	free(root);
 	return rc;
 }
@@ -576,23 +679,12 @@ static int cmd_init(int argc, char *argv[], int *idx)
 	}
 
 	write_default_file(root, "src/main.hel",
-			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
+			   "import std.io\n\nmain = () : IO<()> {\n    io.println(\"Hello, Helium!\");\n}\n");
 	write_default_file(root, "lib/math.hel",
 			   "module math;\n\n/* Local module skeleton. */\n");
 	write_default_file(root, "tests/smoke_test.hel",
 			   "foreign io_unit: IO<()>;\n\nmain: IO<()> = io_unit;\n");
 	write_default_file(root, ".env", "# Local development environment variables.\n");
-	{
-		char *repo = repo_root();
-		char *harness_src = hel_path_join(repo, "tests/run_tests.py");
-		char *harness_dst = hel_path_join(root, "tests/run_tests.py");
-
-		if (hel_path_exists(harness_src))
-			hel_copy_file(harness_src, harness_dst);
-		free(harness_src);
-		free(harness_dst);
-		free(repo);
-	}
 
 	snprintf(manifest, sizeof(manifest),
 		 "[package]\nname = \"%s\"\nversion = \"%s\"\nedition = \"%s\"\n\n[dependencies]\n",
