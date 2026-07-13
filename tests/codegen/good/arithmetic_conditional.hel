@@ -1,0 +1,23 @@
+// @name arithmetic_conditional
+// @phase codegen
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    a = 17;
+    b = 5;
+    if (a > b) {
+        io.print_int(a + b);
+        io.prints(" ");
+        io.print_int(a - b);
+        io.prints(" ");
+        io.print_int(a * b);
+        io.prints(" ");
+        io.print_int(a / b);
+        io.prints(" ");
+        io.print_int(a % b)
+    } else {
+        io.print_int(0)
+    }
+}
