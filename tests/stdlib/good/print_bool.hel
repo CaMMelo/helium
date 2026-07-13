@@ -1,0 +1,12 @@
+// @name print_bool
+// @phase stdlib
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.print_bool(true);
+    io.prints(" ");
+    io.print_bool(false);
+    io.println("")
+}

@@ -1,0 +1,9 @@
+// @name io_arity
+// @phase stdlib
+// @expect error
+
+import std.io
+
+main = () : IO<()> {
+    io.println("one", "two")
+}

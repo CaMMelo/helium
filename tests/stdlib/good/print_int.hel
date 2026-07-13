@@ -1,0 +1,11 @@
+// @name print_int
+// @phase stdlib
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.prints("Answer: ");
+    io.print_int(42);
+    io.println("")
+}

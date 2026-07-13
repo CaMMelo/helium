@@ -1,0 +1,9 @@
+// @name unknown_string_fn
+// @phase stdlib
+// @expect error
+
+import std.string
+
+main = () : IO<()> {
+    string.concat("a", "b")
+}
