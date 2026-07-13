@@ -1800,11 +1800,26 @@ static int check_main(struct helium_env *env, struct helium_subst **subst,
 	main_type = helium_scheme_instantiate(scheme, *subst);
 	expected = make_io_type(make_unit_type());
 
-	/* Allow either IO<()> or a nullary function returning IO<()>. */
+	/*
+	 * Allow any of:
+	 *   IO<()>
+	 *   fn() -> IO<()>
+	 *   fn([str]) -> IO<()>   (command-line arguments)
+	 */
 	if (main_type->kind == HELIUM_TYPE_FN &&
 	    main_type->param_count == 0 &&
 	    main_type->ret &&
 	    helium_type_unify(main_type->ret, expected, subst, error) == 0) {
+		rc = 0;
+	} else if (main_type->kind == HELIUM_TYPE_FN &&
+		   main_type->param_count == 1 &&
+		   main_type->params[0] &&
+		   main_type->params[0]->kind == HELIUM_TYPE_ARRAY &&
+		   main_type->params[0]->elem_type &&
+		   main_type->params[0]->elem_type->kind == HELIUM_TYPE_NAMED &&
+		   strcmp(main_type->params[0]->elem_type->name, "str") == 0 &&
+		   main_type->ret &&
+		   helium_type_unify(main_type->ret, expected, subst, error) == 0) {
 		rc = 0;
 	} else {
 		rc = helium_type_unify(main_type, expected, subst, error);

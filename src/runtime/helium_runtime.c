@@ -315,11 +315,74 @@ helium_format_f64(double n)
 	return buf;
 }
 
+/*
+ * General array helpers.  These are declared as foreign functions by tests
+ * that need to inspect arrays without requiring full language-level indexing.
+ */
+int32_t
+helium_array_length(const helium_array_t *arr)
+{
+	if (!arr)
+		return 0;
+	return (int32_t)arr->length;
+}
+
+const char *
+helium_array_get_str(const helium_array_t *arr, int32_t index)
+{
+	if (!arr || index < 0 || (size_t)index >= arr->length)
+		return "";
+	return ((helium_string_t **)arr->data)[index]->data;
+}
+
+static void
+helium_destroy_string_ref(void *elem)
+{
+	helium_string_t **s = elem;
+
+	if (*s)
+		helium_release((helium_object_t *)*s);
+}
+
+static helium_array_t *
+helium_argv_to_array(int argc, char **argv)
+{
+	helium_array_t *arr;
+	int i;
+
+	arr = helium_alloc_array((size_t)argc, sizeof(helium_string_t *),
+				 helium_destroy_string_ref);
+	for (i = 0; i < argc; i++) {
+		helium_string_t *s;
+		size_t len = argv[i] ? strlen(argv[i]) : 0;
+
+		s = helium_alloc_string(len);
+		if (len)
+			memcpy(s->data, argv[i], len);
+		((helium_string_t **)arr->data)[i] = s;
+	}
+	return arr;
+}
+
 void
-helium_main_wrapper(int64_t (*main_fn)(void))
+helium_main_wrapper(int64_t (*main_fn)(void), int argc, char **argv,
+		    int takes_args)
 {
 	int64_t status;
 
-	status = main_fn();
+	if (takes_args) {
+		/* Skip the program name; user code sees only real arguments. */
+		int user_argc = argc > 1 ? argc - 1 : 0;
+		char **user_argv = user_argc > 0 ? argv + 1 : NULL;
+		helium_array_t *args = helium_argv_to_array(user_argc, user_argv);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+		status = ((int64_t (*)(helium_array_t *))main_fn)(args);
+#pragma GCC diagnostic pop
+		helium_release((helium_object_t *)args);
+	} else {
+		status = main_fn();
+	}
 	exit((int)status);
 }

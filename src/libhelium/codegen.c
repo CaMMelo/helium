@@ -1655,15 +1655,18 @@ static int codegen_function(struct cg_ctx *ctx,
 
 static int emit_main_wrapper(struct cg_ctx *ctx)
 {
-	LLVMTypeRef wrapper_args[1];
+	LLVMTypeRef wrapper_args[4];
 	LLVMTypeRef wrapper_type;
 	LLVMTypeRef main_type;
 	LLVMValueRef wrapper;
 	LLVMValueRef main_fn;
-	LLVMValueRef call_args[1];
+	LLVMValueRef call_args[4];
 	LLVMTypeRef cmain_type;
 	LLVMValueRef cmain;
 	LLVMBasicBlockRef entry;
+	LLVMTypeRef argv_type;
+	LLVMTypeRef cmain_param_types[2];
+	int takes_args;
 
 	if (!ctx->prog->main_name)
 		return -1;
@@ -1672,19 +1675,34 @@ static int emit_main_wrapper(struct cg_ctx *ctx)
 	if (!main_fn)
 		return -1;
 
+	/*
+	 * The Helium main is a lambda: if the generated IR function has a
+	 * parameter, it receives the command-line argument array.
+	 */
+	takes_args = LLVMCountParams(main_fn) > 0;
+
 	main_type = LLVMFunctionType(ctx->i64_type, NULL, 0, 0);
+	argv_type = LLVMPointerType(ctx->ptr_type, 0);
 	wrapper_args[0] = LLVMPointerType(main_type, 0);
+	wrapper_args[1] = ctx->i32_type;
+	wrapper_args[2] = argv_type;
+	wrapper_args[3] = ctx->i32_type;
 	wrapper_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->ctx),
-				      wrapper_args, 1, 0);
+				      wrapper_args, 4, 0);
 	wrapper = LLVMAddFunction(ctx->module, "helium_main_wrapper",
 				  wrapper_type);
 
-	cmain_type = LLVMFunctionType(ctx->i32_type, NULL, 0, 0);
+	cmain_param_types[0] = ctx->i32_type;
+	cmain_param_types[1] = argv_type;
+	cmain_type = LLVMFunctionType(ctx->i32_type, cmain_param_types, 2, 0);
 	cmain = LLVMAddFunction(ctx->module, "main", cmain_type);
 	entry = LLVMAppendBasicBlockInContext(ctx->ctx, cmain, "entry");
 	LLVMPositionBuilderAtEnd(ctx->builder, entry);
 	call_args[0] = main_fn;
-	LLVMBuildCall2(ctx->builder, wrapper_type, wrapper, call_args, 1, "");
+	call_args[1] = LLVMGetParam(cmain, 0);
+	call_args[2] = LLVMGetParam(cmain, 1);
+	call_args[3] = LLVMConstInt(ctx->i32_type, takes_args ? 1 : 0, 0);
+	LLVMBuildCall2(ctx->builder, wrapper_type, wrapper, call_args, 4, "");
 	LLVMBuildRet(ctx->builder, LLVMConstInt(ctx->i32_type, 0, 0));
 	return 0;
 }

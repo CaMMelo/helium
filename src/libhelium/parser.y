@@ -532,6 +532,10 @@ array_type:
 	$$ = helium_type_array($2, size, @1.first_line, @1.first_column);
 	free($4);
     }
+|   LBRACKET type RBRACKET
+    {
+	$$ = helium_type_array($2, 0, @1.first_line, @1.first_column);
+    }
 ;
 
 primary_type:

@@ -1739,15 +1739,26 @@ static int generate_main(struct mono_ctx *ctx, char **error)
 
 	if (main_binding->value->kind == HELIUM_EXPR_LAMBDA) {
 		char *name;
+		struct helium_ir_function *f;
 
 		name = request_function(ctx, "main", NULL, 0, error);
 		if (!name)
 			return -1;
-		ctx->prog->main_name = name;
+		/*
+		 * Rename the generated function so the C entry point emitted by
+		 * the backend can keep the name "main".
+		 */
+		f = find_function(ctx, name);
+		if (f) {
+			free(f->name);
+			f->name = xstrdup("helium_main");
+		}
+		ctx->prog->main_name = xstrdup("helium_main");
+		free(name);
 		return 0;
 	}
 
-	main_func = helium_ir_function_new("main",
+	main_func = helium_ir_function_new("helium_main",
 					   subst_type(main_binding->value->
 						      inferred_type,
 						      NULL, NULL, 0),
@@ -1761,7 +1772,7 @@ static int generate_main(struct mono_ctx *ctx, char **error)
 	helium_ir_block_add_instr(body, value);
 	helium_ir_function_set_body(main_func, body);
 	helium_ir_program_add_function(ctx->prog, main_func);
-	ctx->prog->main_name = xstrdup("main");
+	ctx->prog->main_name = xstrdup("helium_main");
 	return 0;
 }
 

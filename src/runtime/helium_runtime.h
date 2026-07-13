@@ -130,8 +130,20 @@ helium_adt_t *helium_alloc_adt(size_t variant, size_t size,
 helium_closure_t *helium_alloc_closure(helium_generic_fn_t fn, void *env,
 				       void (*env_destroy)(void *env));
 
-/* Program entry wrapper. */
-void helium_main_wrapper(int64_t (*main_fn)(void));
+/* General array helpers. */
+int32_t helium_array_length(const helium_array_t *arr);
+const char *helium_array_get_str(const helium_array_t *arr, int32_t index);
+
+/* Program entry wrapper.
+ *
+ * @main_fn: pointer to the Helium main function.
+ * @argc: argument count from the C runtime (includes the program name).
+ * @argv: argument vector from the C runtime.
+ * @takes_args: non-zero if @main_fn accepts a Helium array of strings,
+ *              zero if it is a nullary function.
+ */
+void helium_main_wrapper(int64_t (*main_fn)(void), int argc, char **argv,
+			 int takes_args);
 
 #ifdef __cplusplus
 }

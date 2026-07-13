@@ -182,7 +182,7 @@ test_main_wrapper(void)
 	CHECK(pid >= 0);
 
 	if (pid == 0) {
-		helium_main_wrapper(main_returns_42);
+		helium_main_wrapper(main_returns_42, 0, NULL, 0);
 		_exit(99); /* unreachable if wrapper exits */
 	}
 

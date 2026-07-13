@@ -1,7 +1,7 @@
-program main=main
+program main=helium_main
 function closure __lambda_0(__env: str) -> IO<()>
     block
         ident io_unit
-function main() -> IO<()>
+function helium_main() -> IO<()>
     closure_call
         closure_alloc __lambda_0
