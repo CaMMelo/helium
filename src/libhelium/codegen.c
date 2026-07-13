@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "ir.h"
+#include "parser.tab.h"
 #include "token.h"
 #include "types.h"
 
@@ -457,79 +458,89 @@ static LLVMValueRef codegen_binary(struct cg_ctx *ctx,
 	is_float = LLVMGetTypeKind(type) == LLVMFloatTypeKind ||
 		LLVMGetTypeKind(type) == LLVMDoubleTypeKind;
 
-	if (op == HELIUM_TOK_PLUS) {
+	if (op == PLUS) {
 		if (is_float)
 			result = LLVMBuildFAdd(ctx->builder, left, right, "add");
 		else
 			result = LLVMBuildAdd(ctx->builder, left, right, "add");
-	} else if (op == HELIUM_TOK_MINUS) {
+	} else if (op == MINUS) {
 		if (is_float)
 			result = LLVMBuildFSub(ctx->builder, left, right, "sub");
 		else
 			result = LLVMBuildSub(ctx->builder, left, right, "sub");
-	} else if (op == HELIUM_TOK_STAR) {
+	} else if (op == STAR) {
 		if (is_float)
 			result = LLVMBuildFMul(ctx->builder, left, right, "mul");
 		else
 			result = LLVMBuildMul(ctx->builder, left, right, "mul");
-	} else if (op == HELIUM_TOK_SLASH) {
+	} else if (op == SLASH) {
 		if (is_float)
 			result = LLVMBuildFDiv(ctx->builder, left, right, "div");
 		else
 			result = LLVMBuildSDiv(ctx->builder, left, right, "div");
-	} else if (op == HELIUM_TOK_PERCENT) {
+	} else if (op == PERCENT) {
 		result = LLVMBuildSRem(ctx->builder, left, right, "rem");
-	} else if (op == HELIUM_TOK_EQEQ) {
+	} else if (op == EQEQ) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, left,
 					       right, "eq");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntEQ, left,
 					       right, "eq");
-	} else if (op == HELIUM_TOK_NEQ) {
+	} else if (op == NEQ) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealONE, left,
 					       right, "ne");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntNE, left,
 					       right, "ne");
-	} else if (op == HELIUM_TOK_LT) {
+	} else if (op == LT) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealOLT, left,
 					       right, "lt");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntSLT, left,
 					       right, "lt");
-	} else if (op == HELIUM_TOK_LE) {
+	} else if (op == LE) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealOLE, left,
 					       right, "le");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntSLE, left,
 					       right, "le");
-	} else if (op == HELIUM_TOK_GT) {
+	} else if (op == GT) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealOGT, left,
 					       right, "gt");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntSGT, left,
 					       right, "gt");
-	} else if (op == HELIUM_TOK_GE) {
+	} else if (op == GE) {
 		if (is_float)
 			result = LLVMBuildFCmp(ctx->builder, LLVMRealOGE, left,
 					       right, "ge");
 		else
 			result = LLVMBuildICmp(ctx->builder, LLVMIntSGE, left,
 					       right, "ge");
-	} else if (op == HELIUM_TOK_AND) {
+	} else if (op == AND) {
 		result = LLVMBuildAnd(ctx->builder, left, right, "and");
-	} else if (op == HELIUM_TOK_OR) {
+	} else if (op == OR) {
 		result = LLVMBuildOr(ctx->builder, left, right, "or");
 	} else {
 		format_error(ctx->error, "%d:%d: unsupported binary operator %d",
 			     instr->line, instr->col, op);
 		return NULL;
 	}
+
+	/*
+	 * Comparison operators produce i1, but Helium's bool is i8.  Zero-extend
+	 * the result when the inferred type is bool.
+	 */
+	if (LLVMGetTypeKind(LLVMTypeOf(result)) == LLVMIntegerTypeKind &&
+	    LLVMGetIntTypeWidth(LLVMTypeOf(result)) == 1 &&
+	    LLVMGetTypeKind(type) == LLVMIntegerTypeKind &&
+	    LLVMGetIntTypeWidth(type) == 8)
+		result = LLVMBuildZExt(ctx->builder, result, type, "bool_ext");
 
 	return result;
 }
@@ -543,11 +554,11 @@ static LLVMValueRef codegen_unary(struct cg_ctx *ctx,
 	if (!operand)
 		return NULL;
 
-	if (op == HELIUM_TOK_MINUS)
+	if (op == MINUS)
 		return LLVMBuildNeg(ctx->builder, operand, "neg");
-	if (op == HELIUM_TOK_NOT)
+	if (op == NOT)
 		return LLVMBuildNot(ctx->builder, operand, "not");
-	if (op == HELIUM_TOK_PLUS)
+	if (op == PLUS)
 		return operand;
 
 	format_error(ctx->error, "%d:%d: unsupported unary operator %d",

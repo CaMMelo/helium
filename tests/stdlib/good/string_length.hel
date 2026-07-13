@@ -1,0 +1,14 @@
+// @name string_length
+// @phase stdlib
+// @expect success
+
+import std.io
+import std.string
+
+main = () : IO<()> {
+    io.prints("len: ");
+    io.print_int(string.length("hello"));
+    io.prints(" empty: ");
+    io.print_bool(string.is_empty(""));
+    io.println("")
+}

@@ -1,0 +1,10 @@
+// @name list_type_mismatch
+// @phase stdlib
+// @expect error
+
+import std.io
+import std.list
+
+main = () : IO<()> {
+    io.print_int(list.length("not an array"))
+}

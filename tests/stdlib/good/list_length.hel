@@ -1,0 +1,12 @@
+// @name list_length
+// @phase stdlib
+// @expect success
+
+import std.io
+import std.list
+
+main = () : IO<()> {
+    io.prints("empty list length: ");
+    io.print_int(list.length([]));
+    io.println("")
+}

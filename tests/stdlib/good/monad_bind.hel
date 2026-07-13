@@ -1,0 +1,13 @@
+// @name monad_bind
+// @phase stdlib
+// @expect success
+
+import std.io
+
+main = () : IO<()> {
+    io.prints("A") >>= (_: ()) {
+        io.prints("B") >>= (_: ()) {
+            io.println("C")
+        }
+    }
+}
