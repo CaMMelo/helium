@@ -1,7 +1,7 @@
 // @name echo_args
 // @phase codegen
 // @expect success
-// @command sh -c 'rm -f /tmp/helium_echo_args && ./build/bin/helium tests/codegen/good/echo_args.hel -o /tmp/helium_echo_args && /tmp/helium_echo_args first second third'
+// @command sh -c 'rm -f /tmp/helium_echo_args && ./build/bin/helium -I lib tests/codegen/good/echo_args.hel -o /tmp/helium_echo_args && /tmp/helium_echo_args first second third'
 
 import std.io
 import std.list

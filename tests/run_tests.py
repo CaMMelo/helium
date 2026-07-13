@@ -261,10 +261,15 @@ def run_helium_test(test: Test) -> Result:
     # src/runtime/helium_runtime.c path is found.
     with tempfile.TemporaryDirectory(prefix="helium_test_") as tmp:
         binary = Path(tmp) / "a.out"
+        repo = _compiler_repo_root(COMPILER)
         compile_cmd = [
             str(COMPILER), str(test.path.resolve()), "-o", str(binary)
         ]
-        proc = _run_command(compile_cmd, cwd=_compiler_repo_root(COMPILER))
+        compile_cmd.extend(["-I", str(repo / "lib")])
+        test_lib = test.path.parent / "lib"
+        if test_lib.is_dir():
+            compile_cmd.extend(["-I", str(test_lib)])
+        proc = _run_command(compile_cmd, cwd=repo)
 
         if _compiler_is_placeholder(proc):
             return Result(test, "SKIP",

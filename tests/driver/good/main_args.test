@@ -1,4 +1,4 @@
 # @name driver_main_args
 # @phase driver
 # @expect success
-# @command sh -c 'rm -f /tmp/helium_main_args && ./build/bin/helium tests/codegen/good/main_args.hel -o /tmp/helium_main_args && /tmp/helium_main_args arg1 arg2'
+# @command sh -c 'rm -f /tmp/helium_main_args && ./build/bin/helium -I lib tests/codegen/good/main_args.hel -o /tmp/helium_main_args && /tmp/helium_main_args arg1 arg2'

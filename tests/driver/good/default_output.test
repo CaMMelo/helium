@@ -1,5 +1,5 @@
 # @name driver_default_output
 # @phase driver
 # @expect success
-# @command sh -c 'rm -f tests/driver/good/hello && ./build/bin/helium tests/driver/good/hello.hel && ./tests/driver/good/hello'
+# @command sh -c 'rm -f tests/driver/good/hello && ./build/bin/helium -I lib tests/driver/good/hello.hel && ./tests/driver/good/hello'
 # @match driver hello
