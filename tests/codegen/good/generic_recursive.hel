@@ -1,0 +1,11 @@
+// @name generic_recursive
+// @phase codegen
+// @expect success
+
+foreign io_unit: IO<()>;
+
+count = <T>(n: i32, x: T): T {
+    if (n == 0) { x } else { count(n - 1, x) }
+};
+
+main = count(3, io_unit);
