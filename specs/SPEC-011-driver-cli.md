@@ -35,6 +35,17 @@ Implement the `helium` compiler executable used by `hel` and developers.
    ```
    When no output name is given, the executable name is the input file with
    the `.hel` extension removed.
+
+   Executables produced by `helium` receive command-line arguments through the
+   standard C `main(int argc, char **argv)`.  A Helium `main` that accepts
+   arguments uses the signature:
+
+   ```helium
+   main = (args: [str]) : IO<()> { ... }
+   ```
+
+   The `args` array contains the arguments passed by the user, excluding the
+   program name.
 2. The driver orchestrates lexer, parser, type checker, monomorphizer, and code
    generator.
 3. It reports errors with file, line, and column.

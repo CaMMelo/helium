@@ -27,8 +27,9 @@ function integration.
    - `helium_alloc_record`
    - `helium_alloc_adt`
    - `helium_alloc_closure`
-5. Provide a `helium_main_wrapper` that invokes `main` and exits with a status
-   code.
+5. Provide a `helium_main_wrapper` that receives `argc`/`argv` from the C
+   runtime, builds a Helium array of strings when `main` expects arguments,
+   invokes `main`, and exits with a status code.
 6. Provide C entry points for the standard-library IO operations that are
    declared as `foreign` in `lib/std/io.hel` (e.g. `io_println`, `io_prints`,
    `io_printi`). String interpolation is generated inline by the backend.

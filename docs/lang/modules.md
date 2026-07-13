@@ -73,6 +73,30 @@ main = () : IO<()> {
 }
 ```
 
+`main` may also accept command-line arguments as an array of strings:
+
+```helium
+import std.io;
+
+main = (args: [str]) : IO<()> {
+    io.println("Arguments:");
+}
+```
+
+The supported entry-point signatures are:
+
+- `main: IO<()>` — an IO action.
+- `main: fn() -> IO<()>` — a nullary function returning an IO action.
+- `main: fn([str]) -> IO<()>` — a function that receives command-line
+  arguments (excluding the program name) and returns an IO action.
+
+For lambdas, the following equivalent forms are also accepted:
+
+```helium
+main = () : IO<()> { ... }
+main = (args: [str]) : IO<()> { ... }
+```
+
 ## 7. Invalid module usage
 
 The compiler must reject:

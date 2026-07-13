@@ -68,6 +68,11 @@ Steps:
 ### `hel run`
 
 Builds the project if needed and then runs the produced binary.
+Extra arguments after `run` are forwarded to the binary:
+
+```
+hel run arg1 arg2
+```
 
 ### `hel test`
 
