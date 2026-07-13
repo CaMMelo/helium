@@ -93,6 +93,18 @@ static int is_io_type(struct helium_type *type)
 	return strcmp(type->name, "IO") == 0;
 }
 
+static int instr_is_owned_heap_value(struct helium_ir_instr *instr)
+{
+	if (!instr)
+		return 0;
+	if (!is_heap_type(instr->type))
+		return 0;
+	return instr->kind == HELIUM_IR_INSTR_RECORD_ALLOC ||
+		instr->kind == HELIUM_IR_INSTR_VARIANT_ALLOC ||
+		instr->kind == HELIUM_IR_INSTR_ARRAY_ALLOC ||
+		instr->kind == HELIUM_IR_INSTR_CALL;
+}
+
 static int is_unit_type(struct helium_type *type)
 {
 	if (!type || type->kind != HELIUM_TYPE_NAMED)
@@ -126,12 +138,15 @@ struct cg_func {
 	LLVMTypeRef loop_fn_type;
 	unsigned loop_binding_count;
 	unsigned captured_count;
+	size_t binding_base;
 };
 
 struct cg_binding {
 	char *name;
 	LLVMValueRef value;
 	struct helium_type *type;
+	int owned;
+	int moved;
 };
 
 struct cg_ctx {
@@ -181,7 +196,38 @@ static void push_binding(struct cg_ctx *ctx, const char *name,
 	b.name = xstrdup(name);
 	b.value = value;
 	b.type = type;
+	b.owned = 0;
+	b.moved = 0;
 	ctx->bindings[ctx->binding_count++] = b;
+}
+
+static void emit_retain(struct cg_ctx *ctx, LLVMValueRef value,
+			struct helium_type *type);
+static void emit_release(struct cg_ctx *ctx, LLVMValueRef value,
+			 struct helium_type *type);
+
+static void mark_result_moved(struct cg_ctx *ctx, LLVMValueRef value)
+{
+	size_t i;
+
+	for (i = 0; i < ctx->binding_count; i++) {
+		struct cg_binding *b = &ctx->bindings[i];
+
+		if (b->value == value && b->owned)
+			b->moved = 1;
+	}
+}
+
+static void release_owned_bindings(struct cg_ctx *ctx, size_t target)
+{
+	size_t i;
+
+	for (i = ctx->binding_count; i > target; i--) {
+		struct cg_binding *b = &ctx->bindings[i - 1];
+
+		if (b->owned && !b->moved && is_heap_type(b->type))
+			emit_release(ctx, b->value, b->type);
+	}
 }
 
 static void pop_bindings_to(struct cg_ctx *ctx, size_t target)
@@ -328,7 +374,7 @@ static void emit_retain(struct cg_ctx *ctx, LLVMValueRef value,
 		return;
 	fn = get_retain_fn(ctx);
 	args[0] = value;
-	LLVMBuildCall2(ctx->builder, LLVMGetElementType(LLVMTypeOf(fn)),
+	LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
 		       fn, args, 1, "");
 }
 
@@ -337,12 +383,16 @@ static void emit_release(struct cg_ctx *ctx, LLVMValueRef value,
 {
 	LLVMValueRef fn;
 	LLVMValueRef args[1];
+	LLVMBasicBlockRef bb;
 
 	if (!is_heap_type(type))
 		return;
+	bb = LLVMGetInsertBlock(ctx->builder);
+	if (!bb || LLVMGetBasicBlockTerminator(bb))
+		return;
 	fn = get_release_fn(ctx);
 	args[0] = value;
-	LLVMBuildCall2(ctx->builder, LLVMGetElementType(LLVMTypeOf(fn)),
+	LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
 		       fn, args, 1, "");
 }
 
@@ -923,26 +973,41 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 	inner.loop_binding_count = loop_binding_count;
 	inner.captured_count = captured_count;
 	ctx->current_func = &inner;
+	{
+		size_t base = ctx->binding_count;
+		struct helium_type *result_type = NULL;
 
-	for (i = 0; i < loop_binding_count; i++) {
-		LLVMValueRef param = LLVMGetParam(loop_fn, (unsigned)i);
-		push_binding(ctx, instr->u.loop.bindings[i]->name, param,
-			     instr->u.loop.bindings[i]->type);
+		inner.binding_base = base;
+
+		for (i = 0; i < loop_binding_count; i++) {
+			LLVMValueRef param = LLVMGetParam(loop_fn, (unsigned)i);
+
+			push_binding(ctx, instr->u.loop.bindings[i]->name, param,
+				     instr->u.loop.bindings[i]->type);
+			ctx->bindings[ctx->binding_count - 1].owned =
+				is_heap_type(instr->u.loop.bindings[i]->type);
+		}
+		for (i = 0; i < captured_count; i++) {
+			LLVMValueRef param = LLVMGetParam(loop_fn,
+							  (unsigned)(loop_binding_count + i));
+
+			push_binding(ctx, ctx->bindings[i].name, param,
+				     ctx->bindings[i].type);
+		}
+
+		codegen_block(ctx, instr->u.loop.body, &result, &result_type);
+		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+			if (result_type && is_heap_type(result_type))
+				mark_result_moved(ctx, result);
+			release_owned_bindings(ctx, base);
+			LLVMBuildRet(ctx->builder, result);
+		} else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+			release_owned_bindings(ctx, base);
+			LLVMBuildRet(ctx->builder, LLVMConstInt(ctx->i64_type, 0, 0));
+		}
+
+		pop_bindings_to(ctx, base);
 	}
-	for (i = 0; i < captured_count; i++) {
-		LLVMValueRef param = LLVMGetParam(loop_fn,
-						  (unsigned)(loop_binding_count + i));
-		push_binding(ctx, ctx->bindings[i].name, param,
-			     ctx->bindings[i].type);
-	}
-
-	codegen_block(ctx, instr->u.loop.body, &result, NULL);
-	if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL)
-		LLVMBuildRet(ctx->builder, result);
-	else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL)
-		LLVMBuildRet(ctx->builder, LLVMConstInt(ctx->i64_type, 0, 0));
-
-	pop_bindings_to(ctx, ctx->binding_count - total_params);
 	ctx->current_func = outer;
 	LLVMPositionBuilderAtEnd(ctx->builder, outer_block);
 
@@ -994,10 +1059,15 @@ static LLVMValueRef codegen_recur(struct cg_ctx *ctx,
 	}
 
 	{
-		LLVMValueRef call = LLVMBuildCall2(ctx->builder,
-						   ctx->current_func->loop_fn_type,
-						   ctx->current_func->loop_fn,
-						   args, total, "recur");
+		size_t base = ctx->current_func ? ctx->current_func->binding_base : 0;
+		LLVMValueRef call;
+
+		release_owned_bindings(ctx, base);
+
+		call = LLVMBuildCall2(ctx->builder,
+				      ctx->current_func->loop_fn_type,
+				      ctx->current_func->loop_fn,
+				      args, total, "recur");
 
 		LLVMSetTailCall(call, 1);
 		LLVMBuildRet(ctx->builder, call);
@@ -1018,6 +1088,9 @@ static LLVMValueRef codegen_instr_block(struct cg_ctx *ctx,
 
 	base = ctx->binding_count;
 	codegen_block(ctx, instr->u.block.block, &result, &result_type);
+	if (result && result_type && is_heap_type(result_type))
+		mark_result_moved(ctx, result);
+	release_owned_bindings(ctx, base);
 	pop_bindings_to(ctx, base);
 	return result;
 }
@@ -1026,11 +1099,15 @@ static LLVMValueRef codegen_let(struct cg_ctx *ctx,
 				struct helium_ir_instr *instr)
 {
 	LLVMValueRef value = codegen_instr(ctx, instr->u.let.value);
+	struct helium_type *bind_type;
 
 	if (!value)
 		return NULL;
-	emit_retain(ctx, value, instr->u.let.type);
-	push_binding(ctx, instr->u.let.name, value, instr->u.let.type);
+	bind_type = instr->u.let.type ? instr->u.let.type :
+		    instr->u.let.value->type;
+	push_binding(ctx, instr->u.let.name, value, bind_type);
+	ctx->bindings[ctx->binding_count - 1].owned =
+		instr_is_owned_heap_value(instr->u.let.value);
 	return value;
 }
 
@@ -1038,10 +1115,14 @@ static LLVMValueRef codegen_return(struct cg_ctx *ctx,
 				   struct helium_ir_instr *instr)
 {
 	LLVMValueRef value = codegen_instr(ctx, instr->u.ret.value);
+	size_t base;
 
 	if (!value)
 		return NULL;
-	emit_retain(ctx, value, instr->type);
+	if (instr->u.ret.value->kind == HELIUM_IR_INSTR_IDENT)
+		mark_result_moved(ctx, value);
+	base = ctx->current_func ? ctx->current_func->binding_base : 0;
+	release_owned_bindings(ctx, base);
 	LLVMBuildRet(ctx->builder, value);
 	return value;
 }
@@ -1237,6 +1318,10 @@ static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
 			/* Control flow leaves this block. */
 			break;
 		}
+		if (val && i < block->instr_count - 1 &&
+		    instr->kind != HELIUM_IR_INSTR_LET &&
+		    instr_is_owned_heap_value(instr))
+			emit_release(ctx, val, instr->type);
 		if (val) {
 			*out_value = val;
 			if (out_type)
@@ -1296,6 +1381,9 @@ static int codegen_function(struct cg_ctx *ctx,
 
 	{
 		size_t base = ctx->binding_count;
+		struct helium_type *result_type = NULL;
+
+		cg_func.binding_base = base;
 
 		for (i = 0; i < func->param_count; i++) {
 			LLVMValueRef param = LLVMGetParam(fn, (unsigned)i);
@@ -1304,12 +1392,17 @@ static int codegen_function(struct cg_ctx *ctx,
 				     func->params[i]->type);
 		}
 
-		codegen_block(ctx, func->body, &result, NULL);
+		codegen_block(ctx, func->body, &result, &result_type);
 
-		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL)
+		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+			if (result_type && is_heap_type(result_type))
+				mark_result_moved(ctx, result);
+			release_owned_bindings(ctx, base);
 			LLVMBuildRet(ctx->builder, result);
-		else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL)
+		} else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+			release_owned_bindings(ctx, base);
 			LLVMBuildRet(ctx->builder, LLVMConstInt(ctx->i64_type, 0, 0));
+		}
 
 		pop_bindings_to(ctx, base);
 	}

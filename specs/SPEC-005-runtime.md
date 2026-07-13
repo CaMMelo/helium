@@ -37,10 +37,14 @@ function integration.
 
 - [x] Runtime unit tests (`tests/runtime/run_tests.sh`) pass, including under
       valgrind when available.
-- [ ] Reference counts are incremented and decremented correctly in generated
-      programs. Pending the SPEC-006 linking fix.
-- [ ] Memory is freed when counts reach zero. Pending the SPEC-006 linking fix.
-- [ ] No leaks in simple test programs. Pending the SPEC-006 linking fix.
-- [ ] Runtime links cleanly with LLVM-generated object files. Pending the
-      SPEC-006 linking fix.
-- [ ] `tests/runtime/run_tests.sh` is integrated into `make test`.
+- [x] Reference counts are incremented and decremented correctly in generated
+      programs. The codegen now emits `helium_release` for owned heap values at
+      scope exit and for discarded temporaries, and keeps returned values alive
+      via ownership transfer.
+- [x] Memory is freed when counts reach zero. Verified by runtime unit tests and
+      valgrind on generated programs that allocate records.
+- [x] No leaks in simple test programs. `codegen/hello` and
+      `codegen/record_alloc` run cleanly under valgrind.
+- [x] Runtime links cleanly with LLVM-generated object files. End-to-end codegen
+      tests compile, link, and run successfully.
+- [x] `tests/runtime/run_tests.sh` is integrated into `make test`.

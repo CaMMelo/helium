@@ -250,6 +250,58 @@ test_zero_size_record(void)
 	CHECK(g_fields_destroyed == 1);
 }
 
+static void
+release_string_elem(void *elem)
+{
+	helium_string_t **sp = elem;
+
+	helium_release(&(*sp)->header);
+}
+
+static void
+test_array_of_strings(void)
+{
+	helium_array_t *arr;
+	helium_string_t *s0;
+	helium_string_t *s1;
+	helium_string_t *s2;
+
+	s0 = helium_alloc_string(3);
+	s1 = helium_alloc_string(3);
+	s2 = helium_alloc_string(3);
+
+	arr = helium_alloc_array(3, sizeof(helium_string_t *),
+				 release_string_elem);
+	CHECK(arr != NULL);
+	memcpy(arr->data, &s0, sizeof(s0));
+	memcpy(arr->data + sizeof(s0), &s1, sizeof(s1));
+	memcpy(arr->data + 2 * sizeof(s0), &s2, sizeof(s2));
+	helium_release(&arr->header);
+}
+
+static void
+destroy_record_with_string_field(helium_object_t *obj)
+{
+	helium_record_t *rec = (helium_record_t *)obj;
+	helium_string_t **sp = (helium_string_t **)rec->data;
+
+	helium_release(&(*sp)->header);
+}
+
+static void
+test_record_releases_heap_field(void)
+{
+	helium_record_t *rec;
+	helium_string_t *s;
+
+	s = helium_alloc_string(4);
+	rec = helium_alloc_record(sizeof(helium_string_t *),
+				  destroy_record_with_string_field);
+	CHECK(rec != NULL);
+	memcpy(rec->data, &s, sizeof(s));
+	helium_release(&rec->header);
+}
+
 int
 main(void)
 {
@@ -270,6 +322,8 @@ main(void)
 	test_empty_string();
 	test_zero_length_array();
 	test_zero_size_record();
+	test_array_of_strings();
+	test_record_releases_heap_field();
 
 	if (g_checks_failed) {
 		printf("FAILED: %d check(s)\n", g_checks_failed);
