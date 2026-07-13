@@ -21,3 +21,11 @@ lib/**/*.o
 lib/**/*.so
 tests/mono/**/*.out
 tests/mono/**/*.err
+
+# Driver-generated executables and objects
+examples/hello
+examples/*.o
+examples/*.runtime.o
+tests/driver/good/hello
+tests/driver/good/*.o
+tests/driver/good/*.runtime.o

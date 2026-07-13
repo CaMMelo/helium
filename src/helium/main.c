@@ -5,13 +5,87 @@
 
 #define _GNU_SOURCE
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "compiler.h"
 
 extern const char *helium_version(void);
+
+/*
+ * Resolve the path to the running helium executable.  On Linux this uses
+ * /proc/self/exe; if that fails we fall back to argv[0] and leave it relative.
+ */
+static char *resolve_executable_path(const char *argv0)
+{
+	char buf[PATH_MAX];
+	ssize_t n;
+
+	n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+	if (n > 0) {
+		buf[n] = '\0';
+		return strdup(buf);
+	}
+
+	if (argv0)
+		return strdup(argv0);
+
+	return NULL;
+}
+
+/*
+ * Derive an absolute path to the runtime source file based on the compiler
+ * executable location.  The bootstrap layout places the binary at either
+ * <root>/build/bin/helium or <root>/bin/helium, so we try both ancestors.
+ * Returns NULL if it cannot be determined.
+ */
+static char *try_runtime_path(const char *bin_dir, const char *rel_root)
+{
+	char *root;
+	char *runtime;
+	struct stat st;
+
+	if (asprintf(&root, "%s/%s", bin_dir, rel_root) < 0)
+		abort();
+	if (asprintf(&runtime, "%s/src/runtime/helium_runtime.c", root) < 0)
+		abort();
+	free(root);
+
+	if (stat(runtime, &st) == 0)
+		return runtime;
+
+	free(runtime);
+	return NULL;
+}
+
+static char *runtime_source_path_from_executable(const char *exec_path)
+{
+	const char *last_slash;
+	char *bin_dir;
+	char *runtime;
+
+	if (!exec_path)
+		return NULL;
+
+	last_slash = strrchr(exec_path, '/');
+	if (!last_slash)
+		return NULL;
+
+	bin_dir = strndup(exec_path, last_slash - exec_path);
+	if (!bin_dir)
+		abort();
+
+	runtime = try_runtime_path(bin_dir, "../..");
+	if (!runtime)
+		runtime = try_runtime_path(bin_dir, "..");
+
+	free(bin_dir);
+	return runtime;
+}
 
 enum driver_action {
 	ACTION_COMPILE,
@@ -167,7 +241,7 @@ static int make_argv_terminated(const char **items, size_t count,
 	return 1;
 }
 
-static int run_compile(const struct driver_options *opts)
+static int run_compile(const struct driver_options *opts, const char *exec_path)
 {
 	struct helium_compile_options copts;
 	char *error;
@@ -178,9 +252,13 @@ static int run_compile(const struct driver_options *opts)
 	int free_module_paths = 0;
 	int free_lib_paths = 0;
 	int free_libs = 0;
+	char *runtime_path = NULL;
 
 	memset(&copts, 0, sizeof(copts));
 	copts.output_path = opts->output;
+	runtime_path = runtime_source_path_from_executable(exec_path);
+	if (runtime_path)
+		copts.runtime_source_path = runtime_path;
 	free_module_paths = make_argv_terminated(opts->module_paths,
 						 opts->module_path_count,
 						 &module_paths);
@@ -204,6 +282,7 @@ static int run_compile(const struct driver_options *opts)
 		free(lib_paths);
 	if (free_libs)
 		free(libs);
+	free(runtime_path);
 	return rc;
 }
 
@@ -247,7 +326,10 @@ static int run_emit(const struct driver_options *opts)
 int main(int argc, char *argv[])
 {
 	struct driver_options opts;
+	char *exec_path = NULL;
 	int rc;
+
+	exec_path = resolve_executable_path(argv[0]);
 
 	if (parse_options(argc, argv, &opts) < 0) {
 		usage(argv[0]);
@@ -261,10 +343,11 @@ int main(int argc, char *argv[])
 	}
 
 	if (opts.action == ACTION_COMPILE)
-		rc = run_compile(&opts);
+		rc = run_compile(&opts, exec_path);
 	else
 		rc = run_emit(&opts);
 
 	free_options(&opts);
+	free(exec_path);
 	return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

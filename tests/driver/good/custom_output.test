@@ -1,0 +1,5 @@
+# @name driver_custom_output
+# @phase driver
+# @expect success
+# @command sh -c 'rm -f /tmp/helium_custom_output && ./build/bin/helium tests/driver/good/hello.hel -o /tmp/helium_custom_output && /tmp/helium_custom_output'
+# @match driver hello
