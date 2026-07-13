@@ -1,0 +1,19 @@
+// Echo all command-line arguments, one per line.
+//
+// Build and run from the repository root:
+//   ./build/bin/helium examples/echo.hel -o /tmp/echo
+//   /tmp/echo first second third
+
+import std.io
+import std.list
+
+main = (args: [str]): IO<()> {
+    loop (i = 0, len = list.length(args)) {
+        if (i >= len) {
+            io.println("")
+        } else {
+            io.println(args[i]);
+            recur(i + 1, len)
+        }
+    }
+}
