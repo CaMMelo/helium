@@ -57,3 +57,6 @@ Implement the `hel` command-line package manager.
 - [x] Adding, removing, and updating dependencies updates `Heliumfile` and
       `Heliumfile.lock` correctly.
 - [x] Error cases (missing dependency, lock mismatch) are reported clearly.
+- [ ] `hel run` and `hel test` succeed for projects whose tests require
+      end-to-end code generation. Blocked by the SPEC-006 runtime linking
+      issue; the package-manager plumbing itself is complete.

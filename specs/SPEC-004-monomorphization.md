@@ -43,7 +43,9 @@ The IR should be lower-level than the AST but still target-independent:
 
 ## Acceptance criteria
 
-- [ ] Generic programs from the docs produce only concrete functions and types.
-- [ ] No type variables remain in the IR.
-- [ ] The IR can be printed for debugging.
-- [ ] The IR is consumable by SPEC-006 (LLVM backend).
+- [x] Generic programs from the docs produce only concrete functions and types.
+- [x] No type variables remain in the IR.
+- [x] The IR can be printed for debugging.
+- [ ] The IR is consumable by SPEC-006 (LLVM backend). Blocked by a known
+      codegen linking issue in SPEC-006; `--emit-ir` and `--emit-llvm` already
+      work.

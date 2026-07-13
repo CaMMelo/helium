@@ -5,7 +5,12 @@
 - Source files use the extension `.hel`.
 - UTF-8 encoded.
 - Statements and declarations are separated by semicolons `;`.
-- A trailing semicolon is allowed before a closing brace.
+- Top-level declarations may omit the separator and trailing semicolon, matching
+  the style used in the example programs.
+- Inside a block, bindings and expressions must be separated by semicolons; a
+  trailing semicolon before the closing `}` is **not** accepted. This avoids a
+  shift/reduce conflict in the grammar and is a divergence from earlier drafts
+  of this document.
 
 ## 2. Comments
 

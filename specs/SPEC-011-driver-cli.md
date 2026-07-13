@@ -43,7 +43,11 @@ Implement the `helium` compiler executable used by `hel` and developers.
 
 ## Acceptance criteria
 
-- [x] `helium src/main.hel` produces an executable.
+- [ ] `helium src/main.hel` produces an executable. Blocked by the SPEC-006
+      runtime linking issue.
 - [x] `--emit-ast`, `--emit-ir`, and `--emit-llvm` produce readable output.
 - [x] Errors are located and actionable.
 - [x] The package manager can invoke the driver without issues.
+- [x] The driver exits with a non-zero status on failure.
+- [ ] The driver produces a runnable executable from a `.hel` file. Pending the
+      SPEC-006 linking fix.

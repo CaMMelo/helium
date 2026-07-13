@@ -44,15 +44,16 @@ library using FFI. They are not builtin.
 
 ## 5. Return / pure
 
-A function or value that lifts a pure value into `IO` may be provided by the
-standard library:
+A function or value that lifts a pure value into `IO` is provided by the
+standard library as an ordinary foreign-backed function. The compiler does not
+need a special `return`/`pure` builtin:
 
 ```helium
 io.pure = <T>(x: T): IO<T> { ... };
 ```
 
-Whether `return`/`pure` is builtin or library-defined will be specified in the
-code generation spec.
+In the bootstrap implementation, `io.pure` can be defined as a foreign function
+that wraps a pure value in the runtime's `IO` representation.
 
 ## 6. Other monads
 

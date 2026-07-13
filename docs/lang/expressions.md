@@ -24,12 +24,14 @@ y = { a = 1; a };   // y = 1
 empty = {};         // empty = ()
 ```
 
-A trailing semicolon after the last expression is allowed:
+Inside a block, semicolons separate bindings and expressions. The last
+expression is the value of the block. A trailing semicolon before the closing
+`}` is **not** accepted, matching the grammar implemented in SPEC-002:
 
 ```helium
 z = {
     a = 1;
-    a;
+    a
 };
 ```
 

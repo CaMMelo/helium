@@ -12,8 +12,10 @@ memory management.
 
 ## Status
 
-This repository is in the bootstrap phase. The first compiler is being built in
-pure C with flex, bison, and LLVM.
+This repository is in the bootstrap phase. The front end (lexer, parser, type
+checker), monomorphizer, package manager, test harness, and LLVM IR generation
+are implemented. End-to-end code generation is currently blocked by a runtime
+linking bug in the compiler driver.
 
 ## Design goals
 
@@ -45,19 +47,23 @@ implementation tasks.
 
 ```bash
 make        # build compiler, package manager, and runtime
-make test   # placeholder until SPEC-010 is implemented
+make test   # run phase-specific harnesses and the general harness
 make clean  # remove build artifacts
 ```
 
-## Quick start (planned)
+## Quick start
 
 ```bash
 hel init myproject
 cd myproject
-hel build
-hel run
-hel test
+hel build       # builds the project
+hel run         # builds if needed and runs the binary
+hel test        # runs the test harness on the project
 ```
+
+End-to-end execution of compiled programs is currently blocked by a known
+linking bug in the compiler driver; `hel build` and `hel run` succeed up to the
+link step.
 
 ## Example
 

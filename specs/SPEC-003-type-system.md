@@ -51,6 +51,7 @@ Implement type checking and inference for Helium.
 
 - `IO<T>` is treated as the only builtin type so that `main : IO<()>` can be
   enforced; the runtime/IO implementation is provided by SPEC-005.
-- The standalone `tests/type` suite currently exercises the type checker
-  directly. The general `run_tests.py` harness will invoke it automatically
-  once the compiler driver wires `helium_check_module` into the pipeline.
+- The type checker is exercised by the dedicated `tests/type/run_tests.sh`
+  harness, which is invoked from `make test`. The general `tests/run_tests.py`
+  harness skips the `type/` directory because it is covered by the dedicated
+  suite.

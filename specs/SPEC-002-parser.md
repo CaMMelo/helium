@@ -69,7 +69,9 @@ Nodes cover at minimum:
       showing an invalid instance.
 - [x] Every bad-case test produces a syntax error with file, line, and column
       information.
-- [ ] The AST can be consumed by the type checker in SPEC-003. (Pending SPEC-003.)
+- [x] The AST can be consumed by the type checker in SPEC-003.
+- [x] The grammar files in `docs/lang/syntax.md` and `docs/lang/expressions.md`
+      are updated to match the implemented block-semicolon rules.
 
 ## Grammar notes
 

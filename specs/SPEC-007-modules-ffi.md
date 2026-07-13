@@ -49,3 +49,6 @@ add : fn(i32, i32) -> i32
 - [x] A foreign function declared in Helium can call a C function from a linked
       library.
 - [x] Missing modules and name resolution failures produce clear errors.
+- [ ] End-to-end codegen tests for modules and FFI produce runnable binaries.
+      Blocked by the SPEC-006 runtime linking issue; module resolution,
+      interface loading, and foreign declaration parsing all work independently.

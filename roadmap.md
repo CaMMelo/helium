@@ -29,7 +29,7 @@ Exit criteria for Phase 1:
 - [x] Every language construct can be lexed, parsed, and type-checked.
 - [x] Good and bad type cases are covered by tests.
 
-## Phase 2 — Core compilation ✅
+## Phase 2 — Core compilation (partial)
 
 | Task | Spec | Dependencies | Deliverable |
 |------|------|--------------|-------------|
@@ -39,11 +39,16 @@ Exit criteria for Phase 1:
 | Compiler driver | SPEC-011 | SPEC-001..006 | `helium` executable |
 
 Exit criteria for Phase 2:
-- [x] A standalone Helium program compiles to a native executable.
-- [x] Arithmetic, recursion, closures, and conditionals work.
-- [x] Memory is reference-counted and freed.
+- [ ] A standalone Helium program compiles to a native executable. Blocked by
+      the SPEC-006 runtime linking bug.
+- [ ] Arithmetic, recursion, closures, and conditionals work in a compiled
+      binary. Pending the linking fix.
+- [ ] Memory is reference-counted and freed in a compiled binary. Pending the
+      linking fix.
+- [x] AST, IR, and LLVM IR emission work.
+- [x] The runtime unit tests pass.
 
-## Phase 3 — Modules, FFI, and ecosystem ✅
+## Phase 3 — Modules, FFI, and ecosystem (partial)
 
 | Task | Spec | Dependencies | Deliverable |
 |------|------|--------------|-------------|
@@ -55,7 +60,10 @@ Exit criteria for Phase 2:
 Exit criteria for Phase 3:
 - [x] Projects can import local modules and dependencies from `.helium/`.
 - [x] `io.println` is provided by the standard library through FFI.
-- [x] `hel init`, `hel build`, `hel run`, and `hel test` work end to end.
+- [x] `hel init`, `hel build`, `hel run`, and `hel test` are implemented and
+      report results correctly.
+- [ ] `hel run` and `hel test` produce runnable binaries for projects that need
+      code generation. Pending the SPEC-006 linking fix.
 - [x] Every language construct has good and bad tests.
 
 ## Phase 4 — Self-hosting compiler
@@ -103,11 +111,27 @@ SPEC-005  ->  SPEC-006
 
 ## Current state
 
-- Foundation: in review.
+- Foundation: complete.
+- SPEC-001..SPEC-003 front end: complete; unit tests pass.
+- SPEC-004 monomorphization: complete; unit tests pass.
 - SPEC-005 reference-counting runtime: implemented in
-  `src/runtime/helium_runtime.h/.c` with unit tests under `tests/runtime/`.
-  Pending integration with SPEC-006.
-- Front end, core compilation, modules, package manager, and testing: ready to
-  be assigned once this roadmap and the specs are approved.
+  `src/runtime/helium_runtime.h/.c` with passing unit tests under
+  `tests/runtime/`. Runtime integration with generated executables is pending
+  the SPEC-006 linking fix; the runtime test runner is not yet invoked by
+  `make test`.
+- SPEC-006 LLVM backend: LLVM IR generation works (`--emit-llvm`), but the
+  final link step fails due to a corrupted runtime object path passed to the
+  system C compiler.
+- SPEC-007 modules and FFI: module resolution, interface files, and foreign
+  declarations work; end-to-end binaries are blocked by SPEC-006.
+- SPEC-008 standard library: `lib/std/io.hel` and runtime entry points are
+  implemented; execution is blocked by SPEC-006.
+- SPEC-009 package manager: `hel init/build/run/test/add/remove/update` are
+  implemented; end-to-end runs are blocked by SPEC-006.
+- SPEC-010 testing framework: the general harness and phase-specific harnesses
+  are implemented. The harness was updated to tolerate non-UTF-8 compiler
+  output.
+- SPEC-011 compiler driver: CLI and emit passes work; executable generation is
+  blocked by SPEC-006.
 - SPEC-010: test harness, directory layout, and representative tests are
   implemented; tests currently skip because the compiler is a placeholder.

@@ -33,6 +33,8 @@ without compiler magic.
 ## Acceptance criteria
 
 - [ ] `import std.io; main = () : IO<()> { io.println("Hello"); }` compiles and
-      prints "Hello".
-- [ ] Chained IO actions with `>>=` work.
-- [ ] Standard library is packaged and installable by `hel`.
+      prints "Hello". The `lib/std/io.hel` module and runtime entry points are
+      implemented; execution is blocked by the SPEC-006 linking issue.
+- [ ] Chained IO actions with `>>=` work. Pending the SPEC-006 linking fix.
+- [x] Standard library modules are loadable as ordinary imported modules by the
+      compiler and package manager.
