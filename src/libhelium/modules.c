@@ -795,9 +795,12 @@ static void add_ancestors(struct helium_search_path *sp, const char *path)
 
 	for (;;) {
 		char *lib_dir = path_join(copy, "lib");
+		char *cache_dir = path_join(copy, ".helium");
 
 		helium_search_path_add(sp, lib_dir);
+		add_cache_versions(sp, cache_dir);
 		free(lib_dir);
+		free(cache_dir);
 
 		p = strrchr(copy, '/');
 		if (!p || p == copy)

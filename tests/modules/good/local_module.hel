@@ -1,0 +1,11 @@
+// @name local_module
+// @phase modules
+// @expect success
+
+import std.io
+import testmod
+
+main = () : IO<()> {
+    io.print_int(testmod.add(2, 3));
+    io.println("");
+}

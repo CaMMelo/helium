@@ -1,0 +1,5 @@
+// @skip not a test; module used by local_module.hel
+
+module testmod;
+
+add = (a: i32, b: i32): i32 { a + b };
