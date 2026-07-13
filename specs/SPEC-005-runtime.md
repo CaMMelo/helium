@@ -29,13 +29,18 @@ function integration.
    - `helium_alloc_closure`
 5. Provide a `helium_main_wrapper` that invokes `main` and exits with a status
    code.
-6. Provide helpers for string interpolation if they cannot be generated inline
-   (to be decided with SPEC-006).
+6. Provide C entry points for the standard-library IO operations that are
+   declared as `foreign` in `lib/std/io.hel` (e.g. `io_println`, `io_prints`,
+   `io_printi`). String interpolation is generated inline by the backend.
 
 ## Acceptance criteria
 
+- [x] Runtime unit tests (`tests/runtime/run_tests.sh`) pass, including under
+      valgrind when available.
 - [ ] Reference counts are incremented and decremented correctly in generated
-      programs.
-- [ ] Memory is freed when counts reach zero.
-- [ ] No leaks in simple test programs.
-- [ ] Runtime links cleanly with LLVM-generated object files.
+      programs. Pending the SPEC-006 linking fix.
+- [ ] Memory is freed when counts reach zero. Pending the SPEC-006 linking fix.
+- [ ] No leaks in simple test programs. Pending the SPEC-006 linking fix.
+- [ ] Runtime links cleanly with LLVM-generated object files. Pending the
+      SPEC-006 linking fix.
+- [ ] `tests/runtime/run_tests.sh` is integrated into `make test`.

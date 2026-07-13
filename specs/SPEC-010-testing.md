@@ -66,6 +66,10 @@ Define and implement how Helium programs and compiler passes are tested.
 
 ## Acceptance criteria
 
-- [ ] Every language construct has at least one good and one bad test.
-- [ ] The harness runs all tests and reports pass/fail.
-- [ ] CI (if present) can invoke the harness with a single command.
+- [x] Every language construct has at least one good and one bad test.
+- [x] The harness discovers all tests, runs them, and reports PASS/FAIL/SKIP.
+- [x] The harness handles compiler output that is not valid UTF-8 by replacing
+      undecodable bytes instead of crashing.
+- [x] `make test` invokes the phase-specific harnesses and the general harness.
+- [ ] CI invokes `make test` and sees all codegen tests pass. Blocked by the
+      SPEC-006 runtime linking issue; the harness itself is complete.

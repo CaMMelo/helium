@@ -58,4 +58,7 @@ The lexer must recognize:
 - [x] `tests/lexer/tokens.hel` is tokenized correctly.
 - [x] Bad input such as unterminated strings or comments produces an error with
       line/column information.
-- [ ] The lexer integrates with the parser built in SPEC-002.
+- [x] The lexer integrates with the parser built in SPEC-002.
+- [x] F-string lexemes are emitted as the token sequence documented in the
+      implementation notes so that the parser can consume interpolated
+      expressions.
