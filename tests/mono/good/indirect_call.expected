@@ -1,0 +1,7 @@
+program main=main
+function closure __lambda_0(__env: str) -> <?>
+    block
+        ident io_unit
+function main() -> IO<()>
+    closure_call
+        closure_alloc __lambda_0

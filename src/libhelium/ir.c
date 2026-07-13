@@ -109,6 +109,28 @@ void helium_ir_function_set_body(struct helium_ir_function *func,
 	func->body = body;
 }
 
+void helium_ir_function_add_capture(struct helium_ir_function *func,
+				    const char *name,
+				    struct helium_type *type)
+{
+	if (func->capture_count == func->capture_capacity) {
+		size_t newcap = func->capture_capacity ? func->capture_capacity * 2 : 4;
+		char **names = realloc(func->capture_names,
+				       newcap * sizeof(*names));
+		struct helium_type **types = realloc(func->capture_types,
+						     newcap * sizeof(*types));
+
+		if (!names || !types)
+			abort();
+		func->capture_names = names;
+		func->capture_types = types;
+		func->capture_capacity = newcap;
+	}
+	func->capture_names[func->capture_count] = xstrdup(name);
+	func->capture_types[func->capture_count] = type;
+	func->capture_count++;
+}
+
 void helium_ir_function_free(struct helium_ir_function *func)
 {
 	size_t i;
@@ -121,6 +143,12 @@ void helium_ir_function_free(struct helium_ir_function *func)
 	free(func->params);
 	helium_type_free(func->ret_type);
 	helium_ir_block_free(func->body);
+	for (i = 0; i < func->capture_count; i++) {
+		free(func->capture_names[i]);
+		helium_type_free(func->capture_types[i]);
+	}
+	free(func->capture_names);
+	free(func->capture_types);
 	free(func);
 }
 
@@ -637,6 +665,53 @@ struct helium_ir_instr *helium_ir_instr_fstring(int line, int col)
 	return instr_new(HELIUM_IR_INSTR_FSTRING, line, col);
 }
 
+struct helium_ir_instr *helium_ir_instr_closure_alloc(const char *func_name,
+				      int line, int col)
+{
+	struct helium_ir_instr *instr = instr_new(HELIUM_IR_INSTR_CLOSURE_ALLOC,
+					  line, col);
+
+	instr->u.closure_alloc.func_name = xstrdup(func_name);
+	return instr;
+}
+
+void helium_ir_closure_alloc_add_capture(struct helium_ir_instr *alloc,
+					 const char *name,
+					 struct helium_ir_instr *value)
+{
+	if (alloc->kind != HELIUM_IR_INSTR_CLOSURE_ALLOC)
+		return;
+	append_ptr((void ***)&alloc->u.closure_alloc.capture_names,
+		   &alloc->u.closure_alloc.name_count,
+		   &alloc->u.closure_alloc.name_capacity,
+		   xstrdup(name));
+	append_ptr((void ***)&alloc->u.closure_alloc.capture_values,
+		   &alloc->u.closure_alloc.value_count,
+		   &alloc->u.closure_alloc.value_capacity,
+		   value);
+}
+
+struct helium_ir_instr *helium_ir_instr_closure_call(
+				struct helium_ir_instr *closure,
+				int line, int col)
+{
+	struct helium_ir_instr *instr = instr_new(HELIUM_IR_INSTR_CLOSURE_CALL,
+					  line, col);
+
+	instr->u.closure_call.closure = closure;
+	return instr;
+}
+
+void helium_ir_closure_call_add_arg(struct helium_ir_instr *call,
+				    struct helium_ir_instr *arg)
+{
+	if (call->kind != HELIUM_IR_INSTR_CLOSURE_CALL)
+		return;
+	append_ptr((void ***)&call->u.closure_call.args,
+		   &call->u.closure_call.arg_count,
+		   &call->u.closure_call.arg_capacity, arg);
+}
+
 void helium_ir_fstring_add_text(struct helium_ir_instr *fstring,
 				const char *text, int line, int col)
 {
@@ -812,6 +887,21 @@ void helium_ir_instr_free(struct helium_ir_instr *instr)
 			free(p);
 		}
 		free(instr->u.fstring.parts);
+		break;
+	case HELIUM_IR_INSTR_CLOSURE_ALLOC:
+		free(instr->u.closure_alloc.func_name);
+		for (i = 0; i < instr->u.closure_alloc.name_count; i++)
+			free(instr->u.closure_alloc.capture_names[i]);
+		for (i = 0; i < instr->u.closure_alloc.value_count; i++)
+			helium_ir_instr_free(instr->u.closure_alloc.capture_values[i]);
+		free(instr->u.closure_alloc.capture_names);
+		free(instr->u.closure_alloc.capture_values);
+		break;
+	case HELIUM_IR_INSTR_CLOSURE_CALL:
+		helium_ir_instr_free(instr->u.closure_call.closure);
+		for (i = 0; i < instr->u.closure_call.arg_count; i++)
+			helium_ir_instr_free(instr->u.closure_call.args[i]);
+		free(instr->u.closure_call.args);
 		break;
 	}
 	free(instr);
@@ -1024,6 +1114,25 @@ static void print_instr(struct helium_ir_instr *instr, int depth, FILE *out)
 		print_indent(depth, out);
 		fprintf(out, "fstring\n");
 		break;
+	case HELIUM_IR_INSTR_CLOSURE_ALLOC:
+		print_indent(depth, out);
+		fprintf(out, "closure_alloc %s",
+			instr->u.closure_alloc.func_name);
+		for (i = 0; i < instr->u.closure_alloc.name_count; i++)
+			fprintf(out, " %s",
+				instr->u.closure_alloc.capture_names[i]);
+		fprintf(out, "\n");
+		for (i = 0; i < instr->u.closure_alloc.value_count; i++)
+			print_instr(instr->u.closure_alloc.capture_values[i],
+				    depth + 1, out);
+		break;
+	case HELIUM_IR_INSTR_CLOSURE_CALL:
+		print_indent(depth, out);
+		fprintf(out, "closure_call\n");
+		print_instr(instr->u.closure_call.closure, depth + 1, out);
+		for (i = 0; i < instr->u.closure_call.arg_count; i++)
+			print_instr(instr->u.closure_call.args[i], depth + 1, out);
+		break;
 	}
 }
 
@@ -1073,8 +1182,19 @@ void helium_ir_program_print(struct helium_ir_program *prog, FILE *out)
 		struct helium_ir_function *func = prog->functions[i];
 		size_t j;
 
-		fprintf(out, "function %s%s(", func->is_foreign ? "foreign " : "",
+		fprintf(out, "function %s%s%s(",
+			func->is_foreign ? "foreign " : "",
+			func->is_closure ? "closure " : "",
 			func->name);
+		for (j = 0; j < func->capture_count; j++) {
+			if (j > 0)
+				fprintf(out, ", ");
+			fprintf(out, "[%s: ", func->capture_names[j]);
+			print_type(func->capture_types[j], out);
+			fprintf(out, "]");
+		}
+		if (func->capture_count > 0 && func->param_count > 0)
+			fprintf(out, ", ");
 		for (j = 0; j < func->param_count; j++) {
 			struct helium_ir_param *p = func->params[j];
 

@@ -22,6 +22,9 @@ struct mono_ctx {
 		size_t type_arg_count;
 		const char *spec_name;
 	} current;
+	char **locals;
+	size_t local_count;
+	size_t local_capacity;
 };
 
 static void *xalloc(size_t size)
@@ -362,6 +365,42 @@ static struct helium_binding *find_top_level_binding(struct mono_ctx *ctx,
 	return NULL;
 }
 
+static int name_in_locals(struct mono_ctx *ctx, const char *name)
+{
+	size_t i;
+
+	for (i = 0; i < ctx->local_count; i++) {
+		if (strcmp(ctx->locals[i], name) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+static void push_local(struct mono_ctx *ctx, const char *name)
+{
+	if (ctx->local_count == ctx->local_capacity) {
+		size_t newcap = ctx->local_capacity ? ctx->local_capacity * 2 : 16;
+		char **tmp = realloc(ctx->locals, newcap * sizeof(*tmp));
+
+		if (!tmp)
+			abort();
+		ctx->locals = tmp;
+		ctx->local_capacity = newcap;
+	}
+	ctx->locals[ctx->local_count++] = xstrdup(name);
+}
+
+static size_t mark_locals(struct mono_ctx *ctx)
+{
+	return ctx->local_count;
+}
+
+static void pop_locals_to(struct mono_ctx *ctx, size_t mark)
+{
+	while (ctx->local_count > mark)
+		free(ctx->locals[--ctx->local_count]);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Generic type specialization                                                */
 /* -------------------------------------------------------------------------- */
@@ -464,6 +503,195 @@ static char *request_function(struct mono_ctx *ctx,
 			      struct helium_type **type_args,
 			      size_t type_arg_count,
 			      char **error);
+
+/* -------------------------------------------------------------------------- */
+/* Free-variable analysis for closures                                        */
+/* -------------------------------------------------------------------------- */
+
+static int name_in_string_list(const char *name, char **names, size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; i++) {
+		if (strcmp(names[i], name) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+static void collect_captures(struct mono_ctx *ctx,
+			     struct helium_expr *expr,
+			     char **bound, size_t bound_count,
+			     char **captures,
+			     struct helium_type **capture_types,
+			     size_t *capture_count,
+			     size_t capture_capacity)
+{
+	size_t i;
+	char **inner_bound;
+	size_t inner_count;
+	size_t inner_cap;
+
+	if (!expr)
+		return;
+
+	switch (expr->kind) {
+	case HELIUM_EXPR_IDENT: {
+		const char *name = expr->u.ident.name;
+
+		if (name_in_string_list(name, bound, bound_count))
+			break;
+		if (find_top_level_binding(ctx, name))
+			break;
+		if (helium_env_lookup_constructor(ctx->typed->env, name))
+			break;
+		if (!name_in_locals(ctx, name))
+			break;
+		if (name_in_string_list(name, captures, *capture_count))
+			break;
+		if (*capture_count < capture_capacity) {
+			captures[(*capture_count)] = xstrdup(name);
+			capture_types[(*capture_count)] =
+				helium_type_copy(expr->inferred_type);
+			(*capture_count)++;
+		}
+		break;
+	}
+
+	case HELIUM_EXPR_LAMBDA: {
+		inner_cap = bound_count + expr->u.lambda.param_count;
+		inner_bound = xalloc(inner_cap * sizeof(*inner_bound));
+		for (i = 0; i < bound_count; i++)
+			inner_bound[i] = bound[i];
+		inner_count = bound_count;
+		for (i = 0; i < expr->u.lambda.param_count; i++)
+			inner_bound[inner_count++] = expr->u.lambda.params[i]->name;
+		collect_captures(ctx, expr->u.lambda.body, inner_bound, inner_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		free(inner_bound);
+		break;
+	}
+
+	case HELIUM_EXPR_BLOCK: {
+		inner_cap = bound_count + expr->u.block.binding_count;
+		inner_bound = xalloc(inner_cap * sizeof(*inner_bound));
+		for (i = 0; i < bound_count; i++)
+			inner_bound[i] = bound[i];
+		inner_count = bound_count;
+		for (i = 0; i < expr->u.block.binding_count; i++) {
+			collect_captures(ctx, expr->u.block.bindings[i]->value,
+					 inner_bound, inner_count,
+					 captures, capture_types, capture_count,
+					 capture_capacity);
+			inner_bound[inner_count++] =
+				expr->u.block.bindings[i]->name;
+		}
+		for (i = 0; i < expr->u.block.expr_count; i++)
+			collect_captures(ctx, expr->u.block.exprs[i],
+					 inner_bound, inner_count,
+					 captures, capture_types, capture_count,
+					 capture_capacity);
+		free(inner_bound);
+		break;
+	}
+
+	case HELIUM_EXPR_BINARY:
+		collect_captures(ctx, expr->u.binary.left, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		collect_captures(ctx, expr->u.binary.right, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_UNARY:
+		collect_captures(ctx, expr->u.unary.operand, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_CALL:
+		collect_captures(ctx, expr->u.call.func, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		for (i = 0; i < expr->u.call.arg_count; i++)
+			collect_captures(ctx, expr->u.call.args[i],
+					 bound, bound_count,
+					 captures, capture_types, capture_count,
+					 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_IF:
+		collect_captures(ctx, expr->u.if_expr.cond, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		collect_captures(ctx, expr->u.if_expr.then_branch, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		collect_captures(ctx, expr->u.if_expr.else_branch, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_RECORD_LIT:
+		for (i = 0; i < expr->u.record_lit.field_count; i++)
+			collect_captures(ctx, expr->u.record_lit.fields[i]->value,
+					 bound, bound_count,
+					 captures, capture_types, capture_count,
+					 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_ARRAY_LIT:
+		for (i = 0; i < expr->u.array_lit.item_count; i++)
+			collect_captures(ctx, expr->u.array_lit.items[i],
+					 bound, bound_count,
+					 captures, capture_types, capture_count,
+					 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_FIELD:
+		collect_captures(ctx, expr->u.field.object, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_RETURN:
+		collect_captures(ctx, expr->u.ret.expr, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_ANNOT:
+		collect_captures(ctx, expr->u.annot.expr, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_BIND:
+		collect_captures(ctx, expr->u.bind.left, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		collect_captures(ctx, expr->u.bind.right, bound, bound_count,
+				 captures, capture_types, capture_count,
+				 capture_capacity);
+		break;
+
+	case HELIUM_EXPR_FSTRING:
+		for (i = 0; i < expr->u.fstring.part_count; i++) {
+			struct helium_fstring_part *p = expr->u.fstring.parts[i];
+
+			if (p->is_expr)
+				collect_captures(ctx, p->u.expr, bound, bound_count,
+						 captures, capture_types,
+						 capture_count, capture_capacity);
+		}
+		break;
+
+	default:
+		break;
+	}
+}
 
 /* -------------------------------------------------------------------------- */
 /* Expression translation                                                     */
@@ -776,6 +1004,26 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 						       names, args,
 						       count);
 				return instr;
+			} else if (name_in_locals(ctx, name)) {
+				/* Local variable holding a closure value. */
+				struct helium_ir_instr *closure;
+
+				closure = helium_ir_instr_ident(name, expr->line,
+							expr->col);
+				closure->type = subst_type(
+					func_expr->inferred_type,
+					names, args, count);
+				instr = helium_ir_instr_closure_call(closure,
+							     expr->line,
+							     expr->col);
+				for (i = 0; i < expr->u.call.arg_count; i++)
+					helium_ir_closure_call_add_arg(instr,
+							       arg_instrs[i]);
+				free(arg_instrs);
+				instr->type = subst_type(expr->inferred_type,
+						       names, args,
+						       count);
+				return instr;
 			} else {
 				/* Foreign functions are declared at top level. */
 				struct helium_top_decl *decl;
@@ -806,13 +1054,26 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 				target_name = xstrdup(name);
 			}
 		} else {
-			format_error(error,
-				     "%d:%d: indirect function calls are not supported",
-				     expr->line, expr->col);
+			/* Non-identifier callee: must be a closure value. */
+			struct helium_ir_instr *closure;
+
+			closure = translate_expr(ctx, func_expr, names, args,
+						 count, error);
+			if (!closure) {
+				for (i = 0; i < expr->u.call.arg_count; i++)
+					helium_ir_instr_free(arg_instrs[i]);
+				free(arg_instrs);
+				return NULL;
+			}
+			instr = helium_ir_instr_closure_call(closure,
+						     expr->line,
+						     expr->col);
 			for (i = 0; i < expr->u.call.arg_count; i++)
-				helium_ir_instr_free(arg_instrs[i]);
+				helium_ir_closure_call_add_arg(instr, arg_instrs[i]);
 			free(arg_instrs);
-			return NULL;
+			instr->type = subst_type(expr->inferred_type, names, args,
+					       count);
+			return instr;
 		}
 
 		(void)is_tail;
@@ -872,21 +1133,53 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 	}
 
 	case HELIUM_EXPR_LAMBDA: {
-		/* Anonymous local function: create a fresh top-level
-		 * function and return an identifier referring to it.
+		/* Anonymous local function.  If it captures variables from the
+		 * enclosing scope, emit a closure value (function pointer + env).
+		 * Otherwise return a plain top-level function reference.
 		 */
 		static int lambda_counter;
 		char buf[64];
 		struct helium_ir_function *func;
 		struct helium_ir_block *body_block;
 		struct helium_ir_instr *body_instr;
+		struct helium_ir_instr *closure;
+		char *captures[32];
+		struct helium_type *capture_types[32];
+		size_t capture_count;
+		char **lambda_params;
 		size_t j;
+		size_t base;
 
 		snprintf(buf, sizeof(buf), "__lambda_%d", lambda_counter++);
+		capture_count = 0;
+		lambda_params = xalloc(expr->u.lambda.param_count *
+				       sizeof(*lambda_params));
+		for (j = 0; j < expr->u.lambda.param_count; j++)
+			lambda_params[j] = expr->u.lambda.params[j]->name;
+		collect_captures(ctx, expr, lambda_params,
+				 expr->u.lambda.param_count,
+				 captures, capture_types, &capture_count, 32);
+		free(lambda_params);
+
 		func = helium_ir_function_new(buf,
 				      subst_type(expr->u.lambda.ret_type,
 						 names, args, count),
 				      expr->line, expr->col);
+
+		func->is_closure = 1;
+		{
+			struct helium_ir_param *env_param;
+			struct helium_type *env_type;
+
+			env_type = helium_type_named("str", expr->line,
+						   expr->col);
+			env_param = helium_ir_param_new("__env", env_type,
+								expr->line, expr->col);
+			helium_ir_function_add_param(func, env_param);
+		}
+		for (j = 0; j < capture_count; j++)
+			helium_ir_function_add_capture(func, captures[j],
+					       capture_types[j]);
 
 		for (j = 0; j < expr->u.lambda.param_count; j++) {
 			struct helium_param *p = expr->u.lambda.params[j];
@@ -899,10 +1192,21 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 			helium_ir_function_add_param(func, irp);
 		}
 
+		base = mark_locals(ctx);
+		for (j = 0; j < capture_count; j++)
+			push_local(ctx, captures[j]);
+		for (j = 0; j < expr->u.lambda.param_count; j++)
+			push_local(ctx, expr->u.lambda.params[j]->name);
+
 		body_instr = translate_expr(ctx, expr->u.lambda.body,
 					    names, args, count, error);
+
+		pop_locals_to(ctx, base);
+
 		if (!body_instr) {
 			helium_ir_function_free(func);
+			for (j = 0; j < capture_count; j++)
+				free(captures[j]);
 			return NULL;
 		}
 		body_block = helium_ir_block_new();
@@ -911,10 +1215,22 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 
 		helium_ir_program_add_function(ctx->prog, func);
 
-		instr = helium_ir_instr_ident(buf, expr->line, expr->col);
-		instr->type = subst_type(expr->inferred_type, names, args,
-				       count);
-		return instr;
+		closure = helium_ir_instr_closure_alloc(buf, expr->line,
+							      expr->col);
+		for (j = 0; j < capture_count; j++) {
+			struct helium_ir_instr *cap;
+
+			cap = helium_ir_instr_ident(captures[j],
+					    expr->line,
+					    expr->col);
+			helium_ir_closure_alloc_add_capture(closure,
+						    captures[j],
+					    cap);
+			free(captures[j]);
+		}
+		closure->type = subst_type(expr->inferred_type, names, args,
+					 count);
+		return closure;
 	}
 
 	case HELIUM_EXPR_RECORD_LIT: {
@@ -1108,10 +1424,22 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 		if (!right)
 			return NULL;
 
-		/* The right side must be a function reference; call it with the
-		 * left value as the argument.
+		/* The right side must be a function value; call it with the
+		 * left value as the argument.  Top-level functions are called
+		 * directly; closure values use an indirect closure call.
 		 */
-		if (right->kind != HELIUM_IR_INSTR_IDENT) {
+		if (right->kind == HELIUM_IR_INSTR_IDENT &&
+		    find_top_level_binding(ctx, right->u.ident.name)) {
+			call = helium_ir_instr_call(right->u.ident.name, expr->line,
+					    expr->col);
+			helium_ir_call_add_arg(call, left);
+			helium_ir_instr_free(right);
+		} else if (right->kind == HELIUM_IR_INSTR_IDENT ||
+			   right->kind == HELIUM_IR_INSTR_CLOSURE_ALLOC) {
+			call = helium_ir_instr_closure_call(right, expr->line,
+						    expr->col);
+			helium_ir_closure_call_add_arg(call, left);
+		} else {
 			format_error(error,
 				     "%d:%d: bind right side must be a function",
 				     expr->line, expr->col);
@@ -1119,12 +1447,7 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 			helium_ir_instr_free(right);
 			return NULL;
 		}
-
-		call = helium_ir_instr_call(right->u.ident.name, expr->line,
-					    expr->col);
-		helium_ir_call_add_arg(call, left);
 		call->type = subst_type(expr->inferred_type, names, args, count);
-		helium_ir_instr_free(right);
 		return call;
 	}
 
@@ -1175,8 +1498,10 @@ static struct helium_ir_instr *translate_block(struct mono_ctx *ctx,
 	struct helium_ir_instr *block_instr;
 	struct helium_ir_block *block;
 	size_t i;
+	size_t base;
 
 	block = helium_ir_block_new();
+	base = mark_locals(ctx);
 
 	for (i = 0; i < expr->u.block.binding_count; i++) {
 		struct helium_binding *b = expr->u.block.bindings[i];
@@ -1187,11 +1512,13 @@ static struct helium_ir_instr *translate_block(struct mono_ctx *ctx,
 		value = translate_expr(ctx, b->value, names, args, count, error);
 		if (!value) {
 			helium_ir_block_free(block);
+			pop_locals_to(ctx, base);
 			return NULL;
 		}
 		bt = subst_type(b->type, names, args, count);
 		let = helium_ir_instr_let(b->name, bt, value, b->line, b->col);
 		helium_ir_block_add_instr(block, let);
+		push_local(ctx, b->name);
 	}
 
 	if (expr->u.block.expr_count == 0) {
@@ -1209,11 +1536,14 @@ static struct helium_ir_instr *translate_block(struct mono_ctx *ctx,
 					   args, count, error);
 			if (!e) {
 				helium_ir_block_free(block);
+				pop_locals_to(ctx, base);
 				return NULL;
 			}
 			helium_ir_block_add_instr(block, e);
 		}
 	}
+
+	pop_locals_to(ctx, base);
 
 	block_instr = helium_ir_instr_block(expr->line, expr->col);
 	helium_ir_block_free(block_instr->u.block.block);
@@ -1286,11 +1616,20 @@ static char *request_function(struct mono_ctx *ctx,
 	{
 		struct helium_ir_block *body_block;
 		struct helium_ir_instr *body_instr;
+		size_t base;
+		size_t j;
+
+		base = mark_locals(ctx);
+		for (j = 0; j < lambda->u.lambda.param_count; j++)
+			push_local(ctx, lambda->u.lambda.params[j]->name);
 
 		body_instr = translate_expr(ctx, lambda->u.lambda.body,
 					    lambda->u.lambda.type_params,
 					    type_args, type_arg_count,
 					    error);
+
+		pop_locals_to(ctx, base);
+
 		if (!body_instr) {
 			ctx->current.generic_name = NULL;
 			ctx->current.type_args = NULL;
@@ -1425,14 +1764,20 @@ struct helium_ir_program *helium_monomorphize(struct helium_typed_module *typed,
 		return NULL;
 	}
 
+
+	memset(&ctx, 0, sizeof(ctx));
 	ctx.typed = typed;
 	ctx.prog = helium_ir_program_new();
 
 	if (generate_main(&ctx, error) < 0) {
 		helium_ir_program_free(ctx.prog);
+		pop_locals_to(&ctx, 0);
+		free(ctx.locals);
 		return NULL;
 	}
 
+	pop_locals_to(&ctx, 0);
+	free(ctx.locals);
 	return ctx.prog;
 }
 
@@ -1447,13 +1792,19 @@ struct helium_ir_program *helium_monomorphize_module(
 		return NULL;
 	}
 
+
+	memset(&ctx, 0, sizeof(ctx));
 	ctx.typed = typed;
 	ctx.prog = helium_ir_program_new();
 
 	if (generate_all_functions(&ctx, error) < 0) {
 		helium_ir_program_free(ctx.prog);
+		pop_locals_to(&ctx, 0);
+		free(ctx.locals);
 		return NULL;
 	}
 
+	pop_locals_to(&ctx, 0);
+	free(ctx.locals);
 	return ctx.prog;
 }

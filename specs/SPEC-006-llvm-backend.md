@@ -35,7 +35,7 @@ Generate LLVM IR and native code from the monomorphic IR.
 
 - [x] A Helium program with arithmetic and conditionals compiles and runs.
 - [x] Recursive functions do not overflow the stack when tail-recursive.
-- [ ] Closures capture and use environment correctly.
+- [x] Closures capture and use environment correctly.
 - [x] Reference counting frees unused values. `helium_release` is emitted for
       owned heap values at scope exit and for discarded temporaries. Verified
       leak-free under valgrind for records, arrays, and variants

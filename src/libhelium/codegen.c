@@ -246,6 +246,38 @@ static void pop_bindings_to(struct cg_ctx *ctx, size_t target)
 static LLVMTypeRef helium_type_to_llvm(struct cg_ctx *ctx,
 				       struct helium_type *type);
 
+
+static LLVMTypeRef closure_struct_type(struct cg_ctx *ctx)
+{
+	LLVMTypeRef fields[6];
+
+	/* Matches struct helium_closure in the runtime. */
+	fields[0] = ctx->i64_type; /* refcount */
+	fields[1] = ctx->i32_type; /* kind */
+	fields[2] = ctx->ptr_type; /* destroy */
+	fields[3] = ctx->ptr_type; /* fn */
+	fields[4] = ctx->ptr_type; /* env_destroy */
+	fields[5] = ctx->ptr_type; /* env */
+	return LLVMStructTypeInContext(ctx->ctx, fields, 6, 0);
+}
+
+static LLVMTypeRef closure_env_struct_type(struct cg_ctx *ctx,
+					   struct helium_ir_function *func)
+{
+	LLVMTypeRef *fields;
+	LLVMTypeRef ty;
+	size_t i;
+
+	if (func->capture_count == 0)
+		return LLVMStructTypeInContext(ctx->ctx, NULL, 0, 0);
+	fields = xalloc(func->capture_count * sizeof(*fields));
+	for (i = 0; i < func->capture_count; i++)
+		fields[i] = helium_type_to_llvm(ctx, func->capture_types[i]);
+	ty = LLVMStructTypeInContext(ctx->ctx, fields,
+				     (unsigned)func->capture_count, 0);
+	free(fields);
+	return ty;
+}
 static LLVMTypeRef unit_type(struct cg_ctx *ctx)
 {
 	return ctx->i64_type;
@@ -311,17 +343,20 @@ static LLVMTypeRef helium_type_to_llvm(struct cg_ctx *ctx,
 			return ctx->ptr_type;
 		return ctx->ptr_type;
 	case HELIUM_TYPE_FN:
-		params = xalloc(type->param_count * sizeof(*params));
-		for (i = 0; i < type->param_count; i++)
-			params[i] = helium_type_to_llvm(ctx, type->params[i]);
-		ret = helium_type_to_llvm(ctx, type->ret);
-		return LLVMFunctionType(ret, params,
-					(unsigned)type->param_count, 0);
+		/* Function values are represented as opaque pointers.  Use
+		 * helium_function_type_to_llvm() when the underlying function
+		 * type is required (e.g. for LLVMAddFunction).
+		 */
+		(void)params;
+		(void)ret;
+		(void)i;
+		return ctx->ptr_type;
 	case HELIUM_TYPE_ARRAY:
 		return ctx->ptr_type;
 	}
 	return ctx->i64_type;
 }
+
 
 static LLVMTypeRef llvm_type_for_instr_type(struct cg_ctx *ctx,
 					    struct helium_ir_instr *instr)
@@ -428,6 +463,11 @@ static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 
 static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
 			  LLVMValueRef *out_value, struct helium_type **out_type);
+
+static LLVMValueRef codegen_closure_alloc(struct cg_ctx *ctx,
+					  struct helium_ir_instr *instr);
+static LLVMValueRef codegen_closure_call(struct cg_ctx *ctx,
+					 struct helium_ir_instr *instr);
 
 /* -------------------------------------------------------------------------- */
 /* Literals and identifiers                                                   */
@@ -1254,11 +1294,160 @@ static LLVMValueRef codegen_fstring(struct cg_ctx *ctx,
 /* Instruction dispatcher                                                     */
 /* -------------------------------------------------------------------------- */
 
+
+/* -------------------------------------------------------------------------- */
+/* Closures                                                                   */
+/* -------------------------------------------------------------------------- */
+
+static LLVMValueRef codegen_closure_alloc(struct cg_ctx *ctx,
+					  struct helium_ir_instr *instr)
+{
+	LLVMValueRef fn;
+	LLVMValueRef env;
+	LLVMValueRef closure;
+	LLVMTypeRef env_type;
+	LLVMTypeRef alloc_closure_args[3];
+	LLVMTypeRef alloc_closure_type;
+	LLVMValueRef alloc_closure_args_values[3];
+	LLVMValueRef alloc_closure_fn;
+	LLVMValueRef fn_ptr;
+	LLVMValueRef zero;
+	size_t i;
+	struct helium_ir_function *ir_func = NULL;
+
+	fn = LLVMGetNamedFunction(ctx->module, instr->u.closure_alloc.func_name);
+	if (!fn) {
+		format_error(ctx->error, "%d:%d: closure function '%s' not found",
+			     instr->line, instr->col,
+			     instr->u.closure_alloc.func_name);
+		return NULL;
+	}
+
+	for (i = 0; i < ctx->prog->function_count; i++) {
+		if (strcmp(ctx->prog->functions[i]->name,
+			   instr->u.closure_alloc.func_name) == 0) {
+			ir_func = ctx->prog->functions[i];
+			break;
+		}
+	}
+	if (!ir_func) {
+		format_error(ctx->error, "%d:%d: closure capture metadata missing",
+			     instr->line, instr->col);
+		return NULL;
+	}
+
+	env_type = closure_env_struct_type(ctx, ir_func);
+	if (ir_func->capture_count > 0)
+		env = LLVMBuildMalloc(ctx->builder, env_type, "closure_env");
+	else
+		env = LLVMConstPointerNull(ctx->ptr_type);
+
+	zero = LLVMConstInt(ctx->i32_type, 0, 0);
+	for (i = 0; i < ir_func->capture_count; i++) {
+		LLVMValueRef val;
+		LLVMValueRef indices[2];
+		LLVMValueRef field_ptr;
+		LLVMTypeRef field_type;
+
+		val = codegen_instr(ctx, instr->u.closure_alloc.capture_values[i]);
+		if (!val)
+			return NULL;
+		indices[0] = zero;
+		indices[1] = LLVMConstInt(ctx->i32_type, (unsigned)i, 0);
+		field_ptr = LLVMBuildGEP2(ctx->builder, env_type, env,
+					  indices, 2,
+					  ir_func->capture_names[i]);
+		field_type = helium_type_to_llvm(ctx, ir_func->capture_types[i]);
+		LLVMBuildStore(ctx->builder, val, field_ptr);
+		(void)field_type;
+	}
+
+	fn_ptr = LLVMBuildBitCast(ctx->builder, fn, ctx->ptr_type, "fn_ptr");
+
+	alloc_closure_args[0] = ctx->ptr_type;
+	alloc_closure_args[1] = ctx->ptr_type;
+	alloc_closure_args[2] = ctx->ptr_type;
+	alloc_closure_type = LLVMFunctionType(
+				ctx->ptr_type,
+				alloc_closure_args, 3, 0);
+	alloc_closure_fn = get_runtime_function(ctx, "helium_alloc_closure",
+						alloc_closure_type);
+
+	alloc_closure_args_values[0] = fn_ptr;
+	alloc_closure_args_values[1] = LLVMBuildBitCast(ctx->builder, env,
+						      ctx->ptr_type,
+						      "env_ptr");
+	alloc_closure_args_values[2] = LLVMConstPointerNull(ctx->ptr_type);
+	closure = LLVMBuildCall2(ctx->builder, alloc_closure_type,
+				 alloc_closure_fn,
+				 alloc_closure_args_values, 3,
+				 "closure");
+	return closure;
+}
+
+static LLVMValueRef codegen_closure_call(struct cg_ctx *ctx,
+					 struct helium_ir_instr *instr)
+{
+	LLVMValueRef closure;
+	LLVMValueRef fn_ptr;
+	LLVMValueRef env_ptr;
+	LLVMTypeRef closure_type;
+	LLVMTypeRef *arg_types;
+	LLVMTypeRef func_type;
+	LLVMValueRef *args;
+	LLVMValueRef fn_typed;
+	size_t i;
+	unsigned arg_count;
+	unsigned total_args;
+
+	closure = codegen_instr(ctx, instr->u.closure_call.closure);
+	if (!closure)
+		return NULL;
+
+	arg_count = (unsigned)instr->u.closure_call.arg_count;
+	total_args = arg_count + 1;
+
+	closure_type = closure_struct_type(ctx);
+	fn_ptr = LLVMBuildStructGEP2(ctx->builder, closure_type, closure,
+				     3, "fn");
+	fn_ptr = LLVMBuildLoad2(ctx->builder, ctx->ptr_type, fn_ptr, "fn_ptr");
+	env_ptr = LLVMBuildStructGEP2(ctx->builder, closure_type, closure,
+				     5, "env");
+	env_ptr = LLVMBuildLoad2(ctx->builder, ctx->ptr_type, env_ptr,
+				 "env_ptr");
+
+	arg_types = xalloc(total_args * sizeof(*arg_types));
+	arg_types[0] = ctx->ptr_type;
+	for (i = 0; i < arg_count; i++)
+		arg_types[i + 1] = llvm_type_for_instr_type(
+					ctx, instr->u.closure_call.args[i]);
+	func_type = LLVMFunctionType(
+			llvm_type_for_instr_type(ctx, instr),
+			arg_types, total_args, 0);
+	fn_typed = LLVMBuildBitCast(ctx->builder, fn_ptr,
+				    LLVMPointerType(func_type, 0),
+				    "fn_typed");
+
+	args = xalloc(total_args * sizeof(*args));
+	args[0] = env_ptr;
+	for (i = 0; i < arg_count; i++) {
+		args[i + 1] = codegen_instr(ctx, instr->u.closure_call.args[i]);
+		if (!args[i + 1]) {
+			free(args);
+			free(arg_types);
+			return NULL;
+		}
+	}
+
+	return LLVMBuildCall2(ctx->builder, func_type, fn_typed, args,
+			      total_args, "closure_call");
+}
 static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 				  struct helium_ir_instr *instr)
 {
 	if (!instr)
 		return LLVMConstInt(ctx->i64_type, 0, 0);
+
 
 	switch (instr->kind) {
 	case HELIUM_IR_INSTR_LITERAL:
@@ -1306,6 +1495,10 @@ static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 		return codegen_unary(ctx, instr);
 	case HELIUM_IR_INSTR_FSTRING:
 		return codegen_fstring(ctx, instr);
+	case HELIUM_IR_INSTR_CLOSURE_ALLOC:
+		return codegen_closure_alloc(ctx, instr);
+	case HELIUM_IR_INSTR_CLOSURE_CALL:
+		return codegen_closure_call(ctx, instr);
 	}
 	format_error(ctx->error, "%d:%d: unsupported IR instruction kind %d",
 		     instr->line, instr->col, instr->kind);
@@ -1401,6 +1594,35 @@ static int codegen_function(struct cg_ctx *ctx,
 		struct helium_type *result_type = NULL;
 
 		cg_func.binding_base = base;
+
+		if (func->is_closure && func->capture_count > 0) {
+			LLVMValueRef env_param = LLVMGetParam(fn, 0);
+			LLVMTypeRef env_type = closure_env_struct_type(ctx, func);
+			LLVMValueRef env_ptr;
+			size_t j;
+
+			env_ptr = LLVMBuildBitCast(ctx->builder, env_param,
+						     LLVMPointerType(env_type, 0),
+						     "env");
+			for (j = 0; j < func->capture_count; j++) {
+				LLVMValueRef indices[2];
+				LLVMValueRef field_ptr;
+				LLVMValueRef val;
+
+				indices[0] = LLVMConstInt(ctx->i32_type, 0, 0);
+				indices[1] = LLVMConstInt(ctx->i32_type, (unsigned)j, 0);
+				field_ptr = LLVMBuildGEP2(ctx->builder, env_type,
+							  env_ptr, indices, 2,
+							  func->capture_names[j]);
+				val = LLVMBuildLoad2(ctx->builder,
+						     helium_type_to_llvm(ctx,
+								 func->capture_types[j]),
+						     field_ptr,
+						     func->capture_names[j]);
+				push_binding(ctx, func->capture_names[j], val,
+					     func->capture_types[j]);
+			}
+		}
 
 		for (i = 0; i < func->param_count; i++) {
 			LLVMValueRef param = LLVMGetParam(fn, (unsigned)i);

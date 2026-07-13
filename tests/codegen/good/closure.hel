@@ -1,0 +1,14 @@
+// @name closure
+// @phase codegen
+// @expect success
+
+import std.io
+
+make_adder = (n: i32): fn(i32) -> i32 { (x: i32): i32 { x + n } };
+
+main = () : IO<()> {
+    add5 = make_adder(5);
+    result = add5(3);
+    io.print_int(result);
+    io.println("");
+}
