@@ -1,5 +1,5 @@
 # @name build_local_lib
 # @phase pm
 # @expect success
-# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf "$tmp"" EXIT; hel=$(pwd)/build/bin/hel; repo=$(pwd); "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { printf "import math\nimport std.io\n\nmain = () : IO<()> {\n    io.print_int(math.add(2, 3));\n}\n" > src/main.hel; mkdir -p lib/std; cp "$repo/lib/std/io.hel" "$repo/lib/std/io.hei" lib/std/; "$hel" build; "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf "$tmp"" EXIT; hel=$(pwd)/build/bin/hel; repo=$(pwd); "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { printf "import math\nimport std.io\n\nmain = () : IO<()> {\n    io.print_int(math.add(2, 3));\n}\n" > src/main.hel; mkdir -p lib/std; cp "$repo"/libs/std/lib/std/*.hel lib/std/; cp -r "$repo"/libs/std/lib/std/csrc lib/std/; "$hel" build; "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
 # @match 5

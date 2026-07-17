@@ -1,7 +1,8 @@
 // Echo all command-line arguments, one per line.
 //
 // Build and run from the repository root:
-//   ./build/bin/helium examples/echo.hel -o /tmp/echo
+//   ./build/bin/helium -I libs/std/.helium/std/0.1.0 \
+//       -L libs/std/.helium/std/0.1.0 -l std examples/echo.hel -o /tmp/echo
 //   /tmp/echo first second third
 
 import std.io

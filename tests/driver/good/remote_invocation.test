@@ -1,5 +1,5 @@
 # @name driver_remote_invocation
 # @phase driver
 # @expect success
-# @command sh -c 'repo=$(pwd); cd /tmp; rm -f helium_remote; "$repo/build/bin/helium" -I "$repo/lib" "$repo/tests/driver/good/hello.hel" -o /tmp/helium_remote; /tmp/helium_remote'
+# @command sh -c 'repo=$(pwd); cd /tmp; rm -f helium_remote; "$repo/build/bin/helium" -I "$repo/libs/std/.helium/std/0.1.0" -L "$repo/libs/std/.helium/std/0.1.0" -l std "$repo/tests/driver/good/hello.hel" -o /tmp/helium_remote; /tmp/helium_remote'
 # @match driver hello

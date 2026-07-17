@@ -244,6 +244,23 @@ def _check_command_result(test: Test,
     return Result(test, "PASS", "", proc.stdout, proc.stderr)
 
 
+def _std_cache_flags(repo: Path) -> list[str]:
+    """Return driver flags pointing at the installed libs/std package cache.
+
+    The std package is built once by `make test` (target libs-std) into
+    libs/std/.helium/std/<version>/.  When the cache is present, tests that
+    import std.* resolve against it; when it is absent, no flags are added.
+    """
+    std_dir = repo / "libs" / "std" / ".helium" / "std"
+    if not std_dir.is_dir():
+        return []
+    versions = sorted(p for p in std_dir.iterdir() if p.is_dir())
+    if not versions:
+        return []
+    vdir = versions[-1]
+    return ["-I", str(vdir), "-L", str(vdir), "-l", "std"]
+
+
 def run_helium_test(test: Test) -> Result:
     if not COMPILER.exists():
         return Result(test, "SKIP", f"compiler not found: {COMPILER}")
@@ -265,7 +282,7 @@ def run_helium_test(test: Test) -> Result:
         compile_cmd = [
             str(COMPILER), str(test.path.resolve()), "-o", str(binary)
         ]
-        compile_cmd.extend(["-I", str(repo / "lib")])
+        compile_cmd.extend(_std_cache_flags(repo))
         test_lib = test.path.parent / "lib"
         if test_lib.is_dir():
             compile_cmd.extend(["-I", str(test_lib)])

@@ -188,64 +188,17 @@ helium_alloc_closure(helium_generic_fn_t fn, void *env,
 }
 
 /*
- * Standard library helpers for std.io.
- *
- * These are ordinary C functions called through the FFI.  They follow the
- * naming convention "<module>_<function>" because the compiler prefixes each
- * module's top-level names with the module name when emitting object code.
+ * io_unit is the runtime bridge for IO<()> values, needed by the `hel init`
+ * scaffold and import-free codegen tests.  It is an ordinary C function
+ * called through the FFI and follows the "<module>_<function>" naming
+ * convention because the compiler prefixes each module's top-level names
+ * with the module name when emitting object code.  The remaining std.io
+ * entry points live in the libs/std package's csrc (SPEC-008).
  */
 int64_t
 io_unit(void)
 {
 	return 0;
-}
-
-int64_t
-io_println(const char *s)
-{
-	puts(s ? s : "");
-	return 0;
-}
-
-int64_t
-io_prints(const char *s)
-{
-	fputs(s ? s : "", stdout);
-	return 0;
-}
-
-int64_t
-io_print_int(int32_t n)
-{
-	printf("%d", n);
-	return 0;
-}
-
-int64_t
-io_print_bool(int8_t b)
-{
-	printf("%s", b ? "true" : "false");
-	return 0;
-}
-
-char *
-io_read_line(void)
-{
-	char *line = NULL;
-	size_t cap = 0;
-	ssize_t n;
-
-	n = getline(&line, &cap, stdin);
-	if (n < 0) {
-		free(line);
-		line = malloc(1);
-		if (!line)
-			abort();
-		line[0] = '\0';
-	} else if ((size_t)n > 0 && line[n - 1] == '\n') {
-		line[n - 1] = '\0';
-	}
-	return line;
 }
 
 /*
@@ -269,50 +222,6 @@ list_length(const helium_array_t *arr)
 	if (!arr)
 		return 0;
 	return (int32_t)arr->length;
-}
-
-char *
-helium_format_i32(int32_t n)
-{
-	char *buf = malloc(16);
-
-	if (!buf)
-		abort();
-	snprintf(buf, 16, "%d", n);
-	return buf;
-}
-
-char *
-helium_format_i64(int64_t n)
-{
-	char *buf = malloc(32);
-
-	if (!buf)
-		abort();
-	snprintf(buf, 32, "%ld", (long)n);
-	return buf;
-}
-
-char *
-helium_format_bool(int8_t b)
-{
-	char *buf = malloc(6);
-
-	if (!buf)
-		abort();
-	snprintf(buf, 6, "%s", b ? "true" : "false");
-	return buf;
-}
-
-char *
-helium_format_f64(double n)
-{
-	char *buf = malloc(64);
-
-	if (!buf)
-		abort();
-	snprintf(buf, 64, "%g", n);
-	return buf;
 }
 
 /*

@@ -124,8 +124,11 @@ SPEC-005  ->  SPEC-006
   are all verified.
 - SPEC-007 modules and FFI: complete. Local modules, cached dependencies,
   interface files, and foreign declarations work end-to-end.
-- SPEC-008 standard library: in progress. Relocating to the `libs/std`
-  package with io implemented in package C sources (csrc).
+- SPEC-008 standard library: complete. The standard library is the `libs/std`
+  package: `std.io`, `std.string` (with `equals`), and `std.list` modules whose
+  effectful functions are implemented in package C sources (csrc), built,
+  installed, and linked by `hel`. The runtime keeps only `io_unit`,
+  `string_length`, and `list_length` from the old std surface.
 - SPEC-009 package manager: complete. Package csrc is compiled and archived
   as `lib<pkg>.a`, cached archives link into the final binary, and library
   mode builds packages without `src/main.hel`.
@@ -140,4 +143,6 @@ SPEC-005  ->  SPEC-006
   - Packages shipped with the compiler repository live under `libs/<pkg>/`
     (starting with `libs/std`) and are built and consumed like any other
     package through the `.helium/` cache.
+  - `make test` builds `libs/std` via the `libs-std` target, and tests that
+    import `std.*` resolve against the installed package cache.
 - Next major goal: Phase 4 — self-hosting compiler.

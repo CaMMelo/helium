@@ -13,9 +13,8 @@ memory management.
 ## Status
 
 This repository is in the bootstrap phase. The front end (lexer, parser, type
-checker), monomorphizer, package manager, test harness, and LLVM IR generation
-are implemented. End-to-end code generation is currently blocked by a runtime
-linking bug in the compiler driver.
+checker), monomorphizer, package manager, test harness, and LLVM code
+generation are implemented; compiled programs link and run natively.
 
 ## Design goals
 
@@ -61,10 +60,6 @@ hel run         # builds if needed and runs the binary
 hel test        # runs the test harness on the project
 ```
 
-End-to-end execution of compiled programs is currently blocked by a known
-linking bug in the compiler driver; `hel build` and `hel run` succeed up to the
-link step.
-
 ## Example
 
 ```helium
@@ -84,6 +79,7 @@ main = () : IO<()> {
 ├── docs/               # Language and package manager specs
 ├── specs/              # Implementation specs for agents
 ├── src/                # Bootstrap compiler and package manager
+├── libs/               # Library packages (std standard library)
 ├── tests/              # Test suites
 └── examples/           # Example Helium programs
 ```

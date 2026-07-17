@@ -1,6 +1,6 @@
 # SPEC-008: Standard Library Bootstrap
 
-**Status:** in progress (reopened)
+**Status:** complete
 
 ## Goal
 
@@ -58,15 +58,15 @@ its effectful functions are implemented in package C sources and linked by
 
 ## Acceptance criteria
 
-- [ ] `import std.io; main = () : IO<()> { io.println("Hello"); }` compiles in
+- [x] `import std.io; main = () : IO<()> { io.println("Hello"); }` compiles in
       a project that depends on the `libs/std` package and prints "Hello".
-- [ ] Chained IO actions with `>>=` work using standard library functions.
-- [ ] `std.string` functions, including `equals`, work via FFI to the
+- [x] Chained IO actions with `>>=` work using standard library functions.
+- [x] `std.string` functions, including `equals`, work via FFI to the
       package's csrc.
-- [ ] `std.list` provides a working array length demonstration.
-- [ ] The standard library builds as the `libs/std` package and is installed
+- [x] `std.list` provides a working array length demonstration.
+- [x] The standard library builds as the `libs/std` package and is installed
       and linked by `hel` per the SPEC-009 csrc convention.
-- [ ] Good and bad case tests exist under `tests/stdlib/`.
+- [x] Good and bad case tests exist under `tests/stdlib/`.
 
 ## Notes
 

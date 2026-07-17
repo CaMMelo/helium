@@ -1,3 +1,10 @@
+// Print Hello World.
+//
+// Build and run from the repository root:
+//   ./build/bin/helium -I libs/std/.helium/std/0.1.0 \
+//       -L libs/std/.helium/std/0.1.0 -l std examples/hello.hel -o /tmp/hello
+//   /tmp/hello
+
 import std.io
 
 main = () : IO<()> {

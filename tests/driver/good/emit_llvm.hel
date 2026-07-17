@@ -1,7 +1,7 @@
 // @name driver_emit_llvm
 // @phase driver
 // @expect success
-// @command ./build/bin/helium --emit-llvm -I lib tests/driver/good/emit_llvm.hel
+// @command ./build/bin/helium --emit-llvm -I libs/std/.helium/std/0.1.0 tests/driver/good/emit_llvm.hel
 // @match ModuleID
 
 import std.io

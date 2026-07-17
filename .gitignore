@@ -21,8 +21,13 @@ lib/**/*.o
 lib/**/*.so
 tests/**/lib/**/*.o
 tests/**/lib/**/*.hei
+examples/**/*.hei
 tests/mono/**/*.out
 tests/mono/**/*.err
+
+# Package manager caches and package build outputs
+**/.helium/
+libs/*/build/
 
 # Driver-generated executables and objects
 examples/hello

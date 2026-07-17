@@ -1,0 +1,13 @@
+// @name string_equals
+// @phase stdlib
+// @expect success
+
+import std.io
+import std.string
+
+main = () : IO<()> {
+    io.print_bool(string.equals("helium", "helium"));
+    io.println("");
+    io.print_bool(string.equals("a", "b"));
+    io.println("")
+}

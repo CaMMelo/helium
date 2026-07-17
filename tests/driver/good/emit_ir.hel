@@ -1,7 +1,7 @@
 // @name driver_emit_ir
 // @phase driver
 // @expect success
-// @command ./build/bin/helium --emit-ir -I lib tests/driver/good/emit_ir.hel
+// @command ./build/bin/helium --emit-ir -I libs/std/.helium/std/0.1.0 tests/driver/good/emit_ir.hel
 // @match program
 
 import std.io

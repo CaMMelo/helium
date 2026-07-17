@@ -106,7 +106,7 @@ directly, build the package once with `hel build` inside `libs/std` and then
 point the driver at the package's own cache:
 
 ```
-helium -I libs/std/.helium/std/0.1.0 -L libs/std/.helium/std/0.1.0 -lstd main.hel -o main
+helium -I libs/std/.helium/std/0.1.0 -L libs/std/.helium/std/0.1.0 -l std main.hel -o main
 ```
 
 ## 7. Invalid module usage

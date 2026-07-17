@@ -1,0 +1,11 @@
+module list;
+
+/*
+ * Arrays are the list-like aggregate in this bootstrap.  Generic map/filter/fold
+ * are deferred because they need dynamic allocation (map/filter) or element
+ * access (fold) not yet exposed to library code through the FFI.
+ *
+ * The runtime helper works for any array, so `length` is declared as a generic
+ * foreign function over the element type.
+ */
+foreign length<T> : fn([T; 0]) -> i32;

@@ -1,5 +1,5 @@
 # @name build_csrc_local_lib
 # @phase pm
 # @expect success
-# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { rm -f lib/math.hel; mkdir -p lib/greet/csrc; printf "module greet;\n\nforeign greeting : fn() -> str;\n" > lib/greet/greet.hel; printf "const char *greet_greeting(void)\n{\n\treturn \"Hello from C\";\n}\n" > lib/greet/csrc/greet.c; printf "import greet\n\nforeign io_prints : fn(str) -> IO<()>;\n\nmain = () : IO<()> {\n    io_prints(greet.greeting())\n}\n" > src/main.hel; "$hel" build && "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { rm -f lib/math.hel; mkdir -p lib/greet/csrc; printf "module greet;\n\nforeign hello : fn() -> IO<()>;\n" > lib/greet/greet.hel; printf "#include <stdint.h>\n#include <stdio.h>\n\nint64_t\ngreet_hello(void)\n{\n\tputs(\"Hello from C\");\n\treturn 0;\n}\n" > lib/greet/csrc/greet.c; printf "import greet\n\nmain = () : IO<()> {\n    greet.hello()\n}\n" > src/main.hel; "$hel" build && "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
 # @match Hello from C

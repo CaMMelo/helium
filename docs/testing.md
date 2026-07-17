@@ -20,6 +20,17 @@ From the repository root:
 `hel test` invokes `tests/run_tests.py` with `--project <project-root>` so that
 a project's own tests are discovered and run.
 
+## The standard library in tests
+
+Tests that import `std.*` resolve against the installed `libs/std` package
+cache (`libs/std/.helium/std/<version>/`).  `make test` builds and installs
+the package before running any tests via the `libs-std` Makefile target
+(`cd libs/std && ../../build/bin/hel build`).  For each compile, the harness
+discovers the highest-sorted installed version directory and passes it to the
+compiler as `-I <vdir> -L <vdir> -l std`; when the cache is absent no extra
+flags are added.  Tests with their own `@command` lines (driver/codegen
+metadata) pass the same flags explicitly.
+
 ## Directory layout
 
 Tests are organized by the compiler phase or language construct they exercise.

@@ -61,7 +61,7 @@ TEST_RUNTIME_SRC := $(TEST_RUNTIME_DIR)/test_runtime.c
 
 TEST_RUNNER := ./tests/run_tests.py
 
-.PHONY: all clean test
+.PHONY: all clean test libs-std
 
 all: $(BIN_DIR)/helium $(BIN_DIR)/hel $(BUILD_DIR)/runtime
 
@@ -143,7 +143,7 @@ $(TEST_RUNTIME_BIN): $(TEST_RUNTIME_SRC) $(RUNTIME_OBJS)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -Isrc/runtime -o $@ $< $(RUNTIME_OBJS)
 
-test: all $(TEST_LEXER_BIN) $(TEST_PARSER_BIN) $(TEST_TYPE_BIN) $(TEST_MONO_BIN) $(TEST_RUNTIME_BIN)
+test: all libs-std $(TEST_LEXER_BIN) $(TEST_PARSER_BIN) $(TEST_TYPE_BIN) $(TEST_MONO_BIN) $(TEST_RUNTIME_BIN)
 	@echo "Running lexer tests..."
 	@cd $(TEST_LEXER_DIR) && ./run_tests.sh $(abspath $(TEST_LEXER_BIN))
 	@echo "Running parser tests..."
@@ -156,6 +156,10 @@ test: all $(TEST_LEXER_BIN) $(TEST_PARSER_BIN) $(TEST_TYPE_BIN) $(TEST_MONO_BIN)
 	@cd $(TEST_RUNTIME_DIR) && ./run_tests.sh $(abspath $(TEST_RUNTIME_BIN))
 	@echo "Running general test harness..."
 	$(TEST_RUNNER)
+
+# Build and install the libs/std package so tests can resolve std.*
+libs-std: $(BIN_DIR)/hel
+	cd libs/std && ../../$(BIN_DIR)/hel build
 
 clean:
 	rm -rf $(BUILD_DIR)

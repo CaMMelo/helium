@@ -1,3 +1,10 @@
+// Loop/recur iteration.
+//
+// Build and run from the repository root:
+//   ./build/bin/helium -I libs/std/.helium/std/0.1.0 \
+//       -L libs/std/.helium/std/0.1.0 -l std examples/loops.hel -o /tmp/loops
+//   /tmp/loops
+
 import std.io
 
 sum_loop = (n: i32): i32 {

@@ -1,3 +1,10 @@
+// Chained IO actions with >>=.
+//
+// Build and run from the repository root:
+//   ./build/bin/helium -I libs/std/.helium/std/0.1.0 \
+//       -L libs/std/.helium/std/0.1.0 -l std examples/monads.hel -o /tmp/monads
+//   /tmp/monads
+
 import std.io
 
 main = () : IO<()> {
