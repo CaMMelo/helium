@@ -74,6 +74,13 @@ code. Avoid adding features that are not requested by the current task.
 - If your task depends on another spec, read its deliverables; do not reimplement
   them.
 - Update the roadmap and spec status when you complete or block a task.
+- Delegated work follows the persona contracts in `agents/`:
+  - `agents/tech-lead.md` — read-only architecture and technology advice.
+  - `agents/senior-developer.md` — task scoping and pre-merge code review.
+  - `agents/staff-developer.md` — implementation of one scoped task at a time.
+  Staff deliveries are reviewed by the senior developer before a separate
+  integration step merges them; the project manager coordinates dispatch,
+  parallelism, and merge order.
 
 ## 9. FFI rules
 
