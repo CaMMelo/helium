@@ -1,0 +1,5 @@
+# @name build_library_only
+# @phase pm
+# @expect success
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { rm -f src/main.hel lib/math.hel; mkdir -p lib/only/csrc; printf "int only_answer(void)\n{\n\treturn 42;\n}\n" > lib/only/csrc/only.c; "$hel" build && test -f .helium/only/0.1.0/libonly.a; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @match Built libraries

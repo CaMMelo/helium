@@ -400,6 +400,259 @@ static int install_local_module(const struct local_module *m, char **error)
 	return rc;
 }
 
+static int cmp_string(const void *a, const void *b);
+
+/* -------------------------------------------------------------------------- */
+/* Package C sources (csrc)                                                    */
+/* -------------------------------------------------------------------------- */
+
+static int read_dir_sorted(const char *path, struct cache_path_list *names)
+{
+	DIR *d;
+	struct dirent *ent;
+
+	d = opendir(path);
+	if (!d)
+		return -1;
+	while ((ent = readdir(d)) != NULL) {
+		if (ent->d_name[0] == '.')
+			continue;
+		cache_path_list_add(names, hel_xstrdup(ent->d_name));
+	}
+	closedir(d);
+	qsort(names->paths, names->count, sizeof(char *), cmp_string);
+	return 0;
+}
+
+static void collect_c_sources(const char *csrc_dir, const char *rel_prefix,
+			      struct cache_path_list *files)
+{
+	struct cache_path_list names = { NULL, 0, 0 };
+	size_t i;
+
+	if (read_dir_sorted(csrc_dir, &names) != 0)
+		return;
+	for (i = 0; i < names.count; i++) {
+		char *full_path = hel_path_join(csrc_dir, names.paths[i]);
+		char *rel_path;
+
+		if (rel_prefix)
+			rel_path = hel_path_join(rel_prefix, names.paths[i]);
+		else
+			rel_path = hel_xstrdup(names.paths[i]);
+
+		if (hel_is_dir(full_path)) {
+			collect_c_sources(full_path, rel_path, files);
+			free(rel_path);
+		} else {
+			const char *dot = strrchr(names.paths[i], '.');
+
+			if (dot && strcmp(dot, ".c") == 0)
+				cache_path_list_add(files, rel_path);
+			else
+				free(rel_path);
+		}
+		free(full_path);
+	}
+	cache_path_list_free(&names);
+}
+
+static int compile_c_source(const char *root, const char *pkg,
+			    const char *rel_source, char **obj_out,
+			    char **error)
+{
+	char *obj_rel = replace_extension(rel_source, ".o");
+	char *src = NULL;
+	char *obj = NULL;
+	char *obj_abs;
+	char *include = NULL;
+	char *argv[12];
+	int rc = -1;
+
+	if (asprintf(&src, "lib/%s/csrc/%s", pkg, rel_source) < 0 ||
+	    asprintf(&obj, "build/lib/%s/csrc/%s", pkg, obj_rel) < 0 ||
+	    asprintf(&include, "-Ilib/%s/csrc", pkg) < 0)
+		abort();
+	obj_abs = hel_path_join(root, obj);
+
+	if (ensure_dir(obj_abs) != 0) {
+		if (error)
+			hel_xasprintf(error, "cannot create directory for %s", obj);
+		goto out;
+	}
+
+	argv[0] = "cc";
+	argv[1] = "-std=c11";
+	argv[2] = "-O2";
+	argv[3] = "-g";
+	argv[4] = "-Wall";
+	argv[5] = "-Wextra";
+	argv[6] = include;
+	argv[7] = "-c";
+	argv[8] = src;
+	argv[9] = "-o";
+	argv[10] = obj;
+	argv[11] = NULL;
+
+	if (run_command(root, argv) != 0) {
+		if (error)
+			hel_xasprintf(error, "failed to compile %s", src);
+		goto out;
+	}
+
+	*obj_out = obj;
+	obj = NULL;
+	rc = 0;
+out:
+	free(obj);
+	free(obj_abs);
+	free(include);
+	free(src);
+	free(obj_rel);
+	return rc;
+}
+
+static int create_package_archive(const char *root, const char *pkg,
+				  const struct cache_path_list *objects,
+				  char **error)
+{
+	char *archive = NULL;
+	char **argv;
+	size_t i;
+	int argc = 0;
+	int rc = -1;
+
+	if (asprintf(&archive, "build/lib/%s/lib%s.a", pkg, pkg) < 0)
+		abort();
+	argv = hel_xalloc((objects->count + 4) * sizeof(*argv));
+	argv[argc++] = "ar";
+	argv[argc++] = "rcs";
+	argv[argc++] = archive;
+	for (i = 0; i < objects->count; i++)
+		argv[argc++] = objects->paths[i];
+	argv[argc] = NULL;
+
+	if (run_command(root, argv) != 0) {
+		if (error)
+			hel_xasprintf(error,
+				      "failed to create archive lib%s.a", pkg);
+		goto out;
+	}
+	rc = 0;
+out:
+	free(argv);
+	free(archive);
+	return rc;
+}
+
+static int install_package_archive(const char *root, const char *pkg,
+				   const char *version, char **error)
+{
+	char *build_archive = NULL;
+	char *cache_root = hel_path_join(root, ".helium");
+	char *cache_dir = hel_path_join(cache_root, pkg);
+	char *cache_archive = NULL;
+	int rc = -1;
+
+	{
+		char *tmp = cache_dir;
+
+		cache_dir = hel_path_join(tmp, version);
+		free(tmp);
+	}
+	if (asprintf(&build_archive, "%s/build/lib/%s/lib%s.a",
+		     root, pkg, pkg) < 0 ||
+	    asprintf(&cache_archive, "%s/lib%s.a", cache_dir, pkg) < 0)
+		abort();
+
+	if (hel_mkdir_p(cache_dir) != 0 ||
+	    hel_copy_file_binary(build_archive, cache_archive) != 0) {
+		if (error)
+			hel_xasprintf(error, "failed to install lib%s.a", pkg);
+		goto out;
+	}
+	rc = 0;
+out:
+	free(cache_archive);
+	free(build_archive);
+	free(cache_dir);
+	free(cache_root);
+	return rc;
+}
+
+static int build_package_csrc(const char *root, const char *pkg,
+			      const char *version, char **error)
+{
+	char *csrc_dir = NULL;
+	struct cache_path_list sources = { NULL, 0, 0 };
+	struct cache_path_list objects = { NULL, 0, 0 };
+	size_t i;
+	int rc = -1;
+
+	if (asprintf(&csrc_dir, "%s/lib/%s/csrc", root, pkg) < 0)
+		abort();
+	if (!hel_is_dir(csrc_dir)) {
+		rc = 0;
+		goto out;
+	}
+
+	collect_c_sources(csrc_dir, NULL, &sources);
+	if (sources.count == 0) {
+		rc = 0;
+		goto out;
+	}
+
+	for (i = 0; i < sources.count; i++) {
+		char *obj = NULL;
+
+		if (compile_c_source(root, pkg, sources.paths[i], &obj,
+				     error) != 0)
+			goto out;
+		cache_path_list_add(&objects, obj);
+	}
+
+	if (create_package_archive(root, pkg, &objects, error) != 0)
+		goto out;
+	if (install_package_archive(root, pkg, version, error) != 0)
+		goto out;
+	rc = 1;
+out:
+	cache_path_list_free(&objects);
+	cache_path_list_free(&sources);
+	free(csrc_dir);
+	return rc;
+}
+
+static int build_local_csrc(const char *root, const char *version, char **error)
+{
+	char *lib_dir = hel_path_join(root, "lib");
+	struct cache_path_list entries = { NULL, 0, 0 };
+	size_t i;
+	int installed = 0;
+
+	if (read_dir_sorted(lib_dir, &entries) != 0) {
+		free(lib_dir);
+		return 0;
+	}
+	for (i = 0; i < entries.count; i++) {
+		char *pkg_dir = hel_path_join(lib_dir, entries.paths[i]);
+		int rc = 0;
+
+		if (hel_is_dir(pkg_dir))
+			rc = build_package_csrc(root, entries.paths[i],
+						version, error);
+		free(pkg_dir);
+		if (rc < 0) {
+			installed = -1;
+			break;
+		}
+		installed += rc;
+	}
+	cache_path_list_free(&entries);
+	free(lib_dir);
+	return installed;
+}
+
 static int compile_local_modules(const char *root, const char *version,
 				 char **error)
 {
@@ -411,6 +664,7 @@ static int compile_local_modules(const char *root, const char *version,
 	const char **module_paths;
 	size_t i;
 	int rc = 0;
+	int installed = 0;
 
 	if (!hel_is_dir(lib_dir)) {
 		free(lib_dir);
@@ -467,6 +721,16 @@ static int compile_local_modules(const char *root, const char *version,
 			rc = -1;
 			break;
 		}
+		installed++;
+	}
+
+	if (rc == 0) {
+		int csrc = build_local_csrc(root, version, error);
+
+		if (csrc < 0)
+			rc = -1;
+		else
+			installed += csrc;
 	}
 
 	free_module_paths(module_paths);
@@ -476,7 +740,7 @@ out:
 	free(lib_dir);
 	free(build_lib_dir);
 	free(cache_root);
-	return rc;
+	return rc == 0 ? installed : -1;
 }
 
 static int run_compiler(const char *root, const char *src,
@@ -489,7 +753,9 @@ static int run_compiler(const char *root, const char *src,
 	struct cache_path_list cache = { NULL, 0, 0 };
 	const char **module_paths;
 	struct helium_compile_options opts;
+	char *extra_libs = NULL;
 	char *error = NULL;
+	size_t i;
 	int rc;
 
 	if (!hel_path_exists(cc)) {
@@ -502,10 +768,40 @@ static int run_compiler(const char *root, const char *src,
 	}
 
 	collect_cache_paths(cache_root, &cache);
+	qsort(cache.paths, cache.count, sizeof(char *), cmp_string);
 	module_paths = build_module_paths(NULL, &cache);
+
+	/*
+	 * Link every cached package archive (.helium/<pkg>/<version>/lib<pkg>.a)
+	 * into the final binary.  The compiler appends the extra_libs tokens
+	 * after the object files, which is the correct static-link order.
+	 */
+	for (i = 0; i < cache.count; i++) {
+		char *parent = hel_dirname(cache.paths[i]);
+		char *archive = NULL;
+
+		if (asprintf(&archive, "%s/lib%s.a", cache.paths[i],
+			     basename(parent)) < 0)
+			abort();
+		if (hel_path_exists(archive)) {
+			if (extra_libs) {
+				char *tmp = NULL;
+
+				if (asprintf(&tmp, "%s %s", extra_libs, archive) < 0)
+					abort();
+				free(extra_libs);
+				extra_libs = tmp;
+			} else {
+				extra_libs = hel_xstrdup(archive);
+			}
+		}
+		free(archive);
+		free(parent);
+	}
 
 	memset(&opts, 0, sizeof(opts));
 	opts.output_path = out;
+	opts.extra_libs = extra_libs;
 	opts.module_paths = module_paths;
 	opts.runtime_source_path = runtime_src;
 
@@ -514,6 +810,7 @@ static int run_compiler(const char *root, const char *src,
 		fprintf(stderr, "error: %s\n", error ? error : "compilation failed");
 		free(error);
 	}
+	free(extra_libs);
 	free_module_paths(module_paths);
 	cache_path_list_free(&cache);
 	free(cc);
@@ -530,16 +827,10 @@ static int build_project(const char *root, const struct hel_manifest *m,
 	char *build_dir = hel_path_join(root, "build");
 	char *out = hel_path_join(build_dir, m->name);
 	char *error = NULL;
+	int installed;
 	int rc;
 
 	(void)l;
-	if (!hel_path_exists(src)) {
-		fprintf(stderr, "error: src/main.hel not found\n");
-		free(src);
-		free(build_dir);
-		free(out);
-		return 1;
-	}
 	if (hel_mkdir_p(build_dir) != 0) {
 		fprintf(stderr, "error: cannot create build directory\n");
 		free(src);
@@ -547,13 +838,33 @@ static int build_project(const char *root, const struct hel_manifest *m,
 		free(out);
 		return 1;
 	}
-	if (compile_local_modules(root, m->version, &error) != 0) {
+	installed = compile_local_modules(root, m->version, &error);
+	if (installed < 0) {
 		fprintf(stderr, "error: %s\n", error ? error : "failed to compile local modules");
 		free(error);
 		free(src);
 		free(build_dir);
 		free(out);
 		return 1;
+	}
+	if (!hel_path_exists(src)) {
+		/*
+		 * Library mode: without src/main.hel there is no binary to
+		 * link, but any installed module or archive is a successful
+		 * library build.
+		 */
+		if (installed > 0) {
+			printf("Built libraries\n");
+			fflush(stdout);
+			rc = 0;
+		} else {
+			fprintf(stderr, "error: src/main.hel not found\n");
+			rc = 1;
+		}
+		free(src);
+		free(build_dir);
+		free(out);
+		return rc;
 	}
 	rc = run_compiler(root, src, out);
 	if (rc == 0) {

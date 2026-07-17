@@ -1,0 +1,5 @@
+# @name build_no_main_no_lib
+# @phase pm
+# @expect error
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { rm -f src/main.hel lib/math.hel; "$hel" build; }) >"$tmp/out.txt" 2>"$tmp/err.txt"; rc=$?; cat "$tmp/err.txt" 1>&2; exit $rc'
+# @match src/main.hel not found

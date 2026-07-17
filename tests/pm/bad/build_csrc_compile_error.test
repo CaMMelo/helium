@@ -1,0 +1,5 @@
+# @name build_csrc_compile_error
+# @phase pm
+# @expect error
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { mkdir -p lib/broken/csrc; printf "int broken(void)\n{\n\treturn 1\n}\n" > lib/broken/csrc/broken.c; "$hel" build; }) >"$tmp/out.txt" 2>"$tmp/err.txt"; rc=$?; cat "$tmp/err.txt" 1>&2; exit $rc'
+# @match failed to compile
