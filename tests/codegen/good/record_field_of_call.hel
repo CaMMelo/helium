@@ -1,0 +1,13 @@
+// @name record_field_of_call
+// @phase codegen
+// @expect success
+
+import std.io
+
+type Point = { x: i32, y: i32 };
+
+make_point = (n: i32): Point { Point{ x: n * 2, y: n } };
+
+main = () : IO<()> {
+    io.print_int((make_point(21)).x)
+}

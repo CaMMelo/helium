@@ -404,6 +404,7 @@ void helium_ir_record_alloc_add_field(struct helium_ir_instr *alloc,
 
 struct helium_ir_instr *helium_ir_instr_record_get(struct helium_ir_instr *object,
 					   const char *field_name,
+					   const char *type_name,
 					   int line, int col)
 {
 	struct helium_ir_instr *instr = instr_new(HELIUM_IR_INSTR_RECORD_GET,
@@ -411,6 +412,7 @@ struct helium_ir_instr *helium_ir_instr_record_get(struct helium_ir_instr *objec
 
 	instr->u.record_get.object = object;
 	instr->u.record_get.field_name = xstrdup(field_name);
+	instr->u.record_get.type_name = xstrdup(type_name);
 	return instr;
 }
 
@@ -807,6 +809,7 @@ void helium_ir_instr_free(struct helium_ir_instr *instr)
 	case HELIUM_IR_INSTR_RECORD_GET:
 		helium_ir_instr_free(instr->u.record_get.object);
 		free(instr->u.record_get.field_name);
+		free(instr->u.record_get.type_name);
 		break;
 	case HELIUM_IR_INSTR_RECORD_SET:
 		helium_ir_instr_free(instr->u.record_set.object);

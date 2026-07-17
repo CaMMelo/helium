@@ -1,0 +1,8 @@
+foreign io_unit: IO<()>;
+
+type Point = { x: i32, y: i32, z: i32 };
+
+main = () : IO<()> {
+    p = Point{ z: 3, x: 1, y: 2 };
+    io_unit
+};

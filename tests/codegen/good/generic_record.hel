@@ -2,10 +2,12 @@
 // @phase codegen
 // @expect success
 
-foreign io_unit: IO<()>;
+import std.io
 
 type Box<T> = { value: T };
 
 identity = <T>(x: T): T { x };
 
-main = (identity(Box{ value: io_unit })).value;
+main = () : IO<()> {
+    io.print_int((identity(Box{ value: 42 })).value)
+}

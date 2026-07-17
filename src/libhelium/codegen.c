@@ -100,6 +100,7 @@ static int instr_is_owned_heap_value(struct helium_ir_instr *instr)
 	if (!is_heap_type(instr->type))
 		return 0;
 	return instr->kind == HELIUM_IR_INSTR_RECORD_ALLOC ||
+		instr->kind == HELIUM_IR_INSTR_RECORD_GET ||
 		instr->kind == HELIUM_IR_INSTR_VARIANT_ALLOC ||
 		instr->kind == HELIUM_IR_INSTR_ARRAY_ALLOC ||
 		instr->kind == HELIUM_IR_INSTR_CALL;
@@ -461,8 +462,8 @@ static LLVMValueRef emit_cstring(struct cg_ctx *ctx, const char *text)
 static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 				  struct helium_ir_instr *instr);
 
-static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
-			  LLVMValueRef *out_value, struct helium_type **out_type);
+static int codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
+			 LLVMValueRef *out_value, struct helium_type **out_type);
 
 static LLVMValueRef codegen_closure_alloc(struct cg_ctx *ctx,
 					  struct helium_ir_instr *instr);
@@ -721,6 +722,118 @@ static LLVMValueRef codegen_call(struct cg_ctx *ctx,
 /* Aggregate types                                                            */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * Field layout matches the frozen runtime: helium_record_t.data starts at
+ * byte offset 32 on 64-bit (header + fields_destroy pointer).  Fields are
+ * fixed 8-byte slots in declaration order: field i at 32 + i * 8.
+ */
+#define RECORD_DATA_OFFSET	32
+#define RECORD_FIELD_SIZE	8
+
+static struct helium_ir_type *find_ir_type(struct cg_ctx *ctx, const char *name)
+{
+	size_t i;
+
+	if (!name)
+		return NULL;
+	for (i = 0; i < ctx->prog->type_count; i++) {
+		if (strcmp(ctx->prog->types[i]->name, name) == 0)
+			return ctx->prog->types[i];
+	}
+	return NULL;
+}
+
+static int record_type_needs_destroy(struct helium_ir_type *type)
+{
+	size_t i;
+
+	if (type->kind != HELIUM_IR_TYPE_RECORD)
+		return 0;
+	for (i = 0; i < type->field_count; i++) {
+		if (is_heap_type(type->fields[i]->type))
+			return 1;
+	}
+	return 0;
+}
+
+static char *record_destroy_name(const char *type_name)
+{
+	static const char prefix[] = "helium_record_destroy_";
+	char *name;
+
+	name = xalloc(sizeof(prefix) + strlen(type_name));
+	sprintf(name, "%s%s", prefix, type_name);
+	return name;
+}
+
+static int find_record_field(struct helium_ir_type *type, const char *name,
+			     size_t *index)
+{
+	size_t i;
+
+	for (i = 0; i < type->field_count; i++) {
+		if (strcmp(type->fields[i]->name, name) == 0) {
+			*index = i;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * emit_record_destroy - generate void helium_record_destroy_<type>(ptr)
+ * releasing every heap-typed field of @type.  Installed as the record's
+ * fields_destroy callback; helium_destroy_record frees the record itself.
+ */
+static void emit_record_destroy(struct cg_ctx *ctx,
+				struct helium_ir_type *type)
+{
+	LLVMTypeRef args[1];
+	LLVMTypeRef ft;
+	LLVMValueRef fn;
+	LLVMValueRef rec;
+	LLVMBasicBlockRef entry;
+	char *name;
+	size_t i;
+
+	name = record_destroy_name(type->name);
+	args[0] = ctx->ptr_type;
+	ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->ctx), args, 1, 0);
+	fn = LLVMAddFunction(ctx->module, name, ft);
+	free(name);
+
+	entry = LLVMAppendBasicBlockInContext(ctx->ctx, fn, "entry");
+	LLVMPositionBuilderAtEnd(ctx->builder, entry);
+	rec = LLVMGetParam(fn, 0);
+
+	for (i = 0; i < type->field_count; i++) {
+		LLVMValueRef slot_offset;
+		LLVMValueRef slot_ptr;
+		LLVMValueRef typed_slot;
+		LLVMValueRef val;
+		LLVMValueRef release_fn;
+		LLVMValueRef call_args[1];
+
+		if (!is_heap_type(type->fields[i]->type))
+			continue;
+		slot_offset = LLVMConstInt(ctx->i64_type,
+				(unsigned long long)(RECORD_DATA_OFFSET +
+						     i * RECORD_FIELD_SIZE), 0);
+		slot_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, rec,
+					 &slot_offset, 1, "slot");
+		typed_slot = LLVMBuildBitCast(ctx->builder, slot_ptr,
+					      LLVMPointerType(ctx->ptr_type, 0),
+					      "fp");
+		val = LLVMBuildLoad2(ctx->builder, ctx->ptr_type, typed_slot,
+				     "field");
+		release_fn = get_release_fn(ctx);
+		call_args[0] = val;
+		LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(release_fn),
+			       release_fn, call_args, 1, "");
+	}
+	LLVMBuildRetVoid(ctx->builder);
+}
+
 static LLVMValueRef codegen_record_alloc(struct cg_ctx *ctx,
 					 struct helium_ir_instr *instr)
 {
@@ -729,14 +842,24 @@ static LLVMValueRef codegen_record_alloc(struct cg_ctx *ctx,
 	LLVMValueRef fn;
 	LLVMValueRef call_args[2];
 	LLVMValueRef rec;
+	LLVMValueRef data_offset;
+	LLVMValueRef data_ptr;
+	struct helium_ir_type *ir_type;
 	size_t i;
 	size_t size = 0;
 
-	(void)instr;
-	/* Sizing would require type layout; use a fixed large buffer for now. */
-	size = instr->u.record_alloc.field_count * 8;
-	if (size < 8)
-		size = 8;
+	size = instr->u.record_alloc.field_count * RECORD_FIELD_SIZE;
+	if (size < RECORD_FIELD_SIZE)
+		size = RECORD_FIELD_SIZE;
+
+	ir_type = find_ir_type(ctx, instr->u.record_alloc.type_name);
+	if (!ir_type) {
+		format_error(ctx->error,
+			     "%d:%d: internal error: unknown record type '%s'",
+			     instr->line, instr->col,
+			     instr->u.record_alloc.type_name);
+		return NULL;
+	}
 
 	args[0] = ctx->i64_type;
 	args[1] = ctx->ptr_type;
@@ -744,13 +867,45 @@ static LLVMValueRef codegen_record_alloc(struct cg_ctx *ctx,
 	fn = get_runtime_function(ctx, "helium_alloc_record", ft);
 	call_args[0] = LLVMConstInt(ctx->i64_type, size, 0);
 	call_args[1] = LLVMConstPointerNull(ctx->ptr_type);
+	if (record_type_needs_destroy(ir_type)) {
+		char *dtor_name = record_destroy_name(ir_type->name);
+
+		call_args[1] = LLVMGetNamedFunction(ctx->module, dtor_name);
+		free(dtor_name);
+	}
 	rec = LLVMBuildCall2(ctx->builder, ft, fn, call_args, 2, "rec");
 
+	data_offset = LLVMConstInt(ctx->i64_type, RECORD_DATA_OFFSET, 0);
+	data_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, rec,
+				 &data_offset, 1, "data");
+
 	for (i = 0; i < instr->u.record_alloc.field_count; i++) {
-		LLVMValueRef val = codegen_instr(ctx,
-						 instr->u.record_alloc.field_values[i]);
-		(void)val;
-		/* Field layout not yet implemented. */
+		struct helium_ir_instr *field =
+			instr->u.record_alloc.field_values[i];
+		LLVMValueRef val = codegen_instr(ctx, field);
+		LLVMValueRef slot_offset;
+		LLVMValueRef slot_ptr;
+		LLVMValueRef typed_slot;
+		LLVMTypeRef field_type;
+
+		if (!val)
+			return NULL;
+		slot_offset = LLVMConstInt(ctx->i64_type,
+				(unsigned long long)(i * RECORD_FIELD_SIZE), 0);
+		slot_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, data_ptr,
+					 &slot_offset, 1, "slot");
+		field_type = llvm_type_for_instr_type(ctx, field);
+		typed_slot = LLVMBuildBitCast(ctx->builder, slot_ptr,
+					      LLVMPointerType(field_type, 0),
+					      "sp");
+		LLVMBuildStore(ctx->builder, val, typed_slot);
+		/*
+		 * Borrowed values (idents, params) are retained for the
+		 * record; owned-fresh values are moved into it.  The
+		 * fields_destroy callback releases one reference per slot.
+		 */
+		if (!instr_is_owned_heap_value(field))
+			emit_retain(ctx, val, field->type);
 	}
 	return rec;
 }
@@ -758,9 +913,58 @@ static LLVMValueRef codegen_record_alloc(struct cg_ctx *ctx,
 static LLVMValueRef codegen_record_get(struct cg_ctx *ctx,
 				       struct helium_ir_instr *instr)
 {
-	format_error(ctx->error, "%d:%d: record_get not yet implemented",
-		     instr->line, instr->col);
-	return NULL;
+	LLVMValueRef obj;
+	LLVMValueRef slot_offset;
+	LLVMValueRef slot_ptr;
+	LLVMValueRef typed_slot;
+	LLVMValueRef result;
+	LLVMTypeRef field_type;
+	struct helium_ir_type *ir_type;
+	size_t field_index;
+
+	obj = codegen_instr(ctx, instr->u.record_get.object);
+	if (!obj)
+		return NULL;
+
+	ir_type = find_ir_type(ctx, instr->u.record_get.type_name);
+	if (!ir_type) {
+		format_error(ctx->error,
+			     "%d:%d: internal error: unknown record type '%s'",
+			     instr->line, instr->col,
+			     instr->u.record_get.type_name ?
+			     instr->u.record_get.type_name : "?");
+		return NULL;
+	}
+	if (!find_record_field(ir_type, instr->u.record_get.field_name,
+			       &field_index)) {
+		format_error(ctx->error,
+			     "%d:%d: internal error: record '%s' has no field '%s'",
+			     instr->line, instr->col,
+			     instr->u.record_get.type_name,
+			     instr->u.record_get.field_name);
+		return NULL;
+	}
+
+	slot_offset = LLVMConstInt(ctx->i64_type,
+			(unsigned long long)(RECORD_DATA_OFFSET +
+					     field_index * RECORD_FIELD_SIZE),
+			0);
+	slot_ptr = LLVMBuildGEP2(ctx->builder, ctx->i8_type, obj,
+				 &slot_offset, 1, "slot");
+	field_type = llvm_type_for_instr_type(ctx, instr);
+	typed_slot = LLVMBuildBitCast(ctx->builder, slot_ptr,
+				      LLVMPointerType(field_type, 0), "fp");
+	result = LLVMBuildLoad2(ctx->builder, field_type, typed_slot, "field");
+
+	/*
+	 * A heap-typed field leaves as an owned reference, so retain it
+	 * before releasing the object when the object was an owned
+	 * temporary (e.g. make().field).
+	 */
+	emit_retain(ctx, result, instr->type);
+	if (instr_is_owned_heap_value(instr->u.record_get.object))
+		emit_release(ctx, obj, instr->u.record_get.object->type);
+	return result;
 }
 
 static LLVMValueRef codegen_record_set(struct cg_ctx *ctx,
@@ -903,7 +1107,7 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	LLVMValueRef cond;
 	LLVMBasicBlockRef then_bb;
 	LLVMBasicBlockRef else_bb;
-	LLVMBasicBlockRef merge_bb;
+	LLVMBasicBlockRef merge_bb = NULL;
 	LLVMValueRef then_val;
 	LLVMValueRef else_val;
 	LLVMTypeRef result_type;
@@ -938,7 +1142,9 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 	LLVMBuildCondBr(ctx->builder, cond, then_bb, else_bb);
 
 	LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
-	codegen_block(ctx, instr->u.if_expr.then_branch, &then_val, NULL);
+	if (codegen_block(ctx, instr->u.if_expr.then_branch, &then_val,
+			  NULL) < 0)
+		return NULL;
 	if (in_loop && then_val &&
 	    !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildRet(ctx->builder, then_val);
@@ -947,7 +1153,9 @@ static LLVMValueRef codegen_if(struct cg_ctx *ctx,
 		LLVMBuildBr(ctx->builder, merge_bb);
 
 	LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
-	codegen_block(ctx, instr->u.if_expr.else_branch, &else_val, NULL);
+	if (codegen_block(ctx, instr->u.if_expr.else_branch, &else_val,
+			  NULL) < 0)
+		return NULL;
 	if (in_loop && else_val &&
 	    !LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
 		LLVMBuildRet(ctx->builder, else_val);
@@ -987,7 +1195,8 @@ static LLVMValueRef codegen_match(struct cg_ctx *ctx,
 		LLVMValueRef arm_val;
 		struct helium_type *arm_type;
 
-		codegen_block(ctx, arm->body, &arm_val, &arm_type);
+		if (codegen_block(ctx, arm->body, &arm_val, &arm_type) < 0)
+			return NULL;
 		if (i == 0 && arm_val)
 			return arm_val;
 	}
@@ -1026,6 +1235,7 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 	unsigned captured_count;
 	unsigned total_params;
 	LLVMValueRef result;
+	int block_rc;
 
 	loop_binding_count = (unsigned)instr->u.loop.binding_count;
 	captured_count = (unsigned)ctx->binding_count;
@@ -1111,13 +1321,16 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 				     ctx->bindings[i].type);
 		}
 
-		codegen_block(ctx, instr->u.loop.body, &result, &result_type);
-		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+		block_rc = codegen_block(ctx, instr->u.loop.body, &result,
+					 &result_type);
+		if (block_rc == 0 && result &&
+		    LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
 			if (result_type && is_heap_type(result_type))
 				mark_result_moved(ctx, result);
 			release_owned_bindings(ctx, base);
 			LLVMBuildRet(ctx->builder, result);
-		} else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
+		} else if (block_rc == 0 &&
+			   LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
 			release_owned_bindings(ctx, base);
 			LLVMBuildRet(ctx->builder, LLVMConstInt(ctx->i64_type, 0, 0));
 		}
@@ -1128,6 +1341,11 @@ static LLVMValueRef codegen_loop(struct cg_ctx *ctx,
 	LLVMPositionBuilderAtEnd(ctx->builder, outer_block);
 
 	free(param_types);
+
+	if (block_rc < 0) {
+		free(arg_values);
+		return NULL;
+	}
 
 	for (i = 0; i < total_params; i++)
 		call_args[i] = arg_values[i];
@@ -1203,7 +1421,10 @@ static LLVMValueRef codegen_instr_block(struct cg_ctx *ctx,
 	size_t base;
 
 	base = ctx->binding_count;
-	codegen_block(ctx, instr->u.block.block, &result, &result_type);
+	if (codegen_block(ctx, instr->u.block.block, &result, &result_type) < 0) {
+		pop_bindings_to(ctx, base);
+		return NULL;
+	}
 	if (result && result_type && is_heap_type(result_type))
 		mark_result_moved(ctx, result);
 	release_owned_bindings(ctx, base);
@@ -1564,8 +1785,8 @@ static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 	return NULL;
 }
 
-static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
-			  LLVMValueRef *out_value, struct helium_type **out_type)
+static int codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
+			 LLVMValueRef *out_value, struct helium_type **out_type)
 {
 	size_t i;
 
@@ -1574,7 +1795,7 @@ static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
 		*out_type = NULL;
 
 	if (!block)
-		return;
+		return 0;
 
 	for (i = 0; i < block->instr_count; i++) {
 		struct helium_ir_instr *instr = block->instrs[i];
@@ -1587,16 +1808,23 @@ static void codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
 			/* Control flow leaves this block. */
 			break;
 		}
-		if (val && i < block->instr_count - 1 &&
+		/*
+		 * A NULL value here means codegen failed; the error was
+		 * formatted at the origin.  RECUR and in-loop IF return
+		 * NULL legitimately but always leave a terminator behind,
+		 * so they take the break above.
+		 */
+		if (!val)
+			return -1;
+		if (i < block->instr_count - 1 &&
 		    instr->kind != HELIUM_IR_INSTR_LET &&
 		    instr_is_owned_heap_value(instr))
 			emit_release(ctx, val, instr->type);
-		if (val) {
-			*out_value = val;
-			if (out_type)
-				*out_type = instr->type;
-		}
+		*out_value = val;
+		if (out_type)
+			*out_type = instr->type;
 	}
+	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1690,7 +1918,11 @@ static int codegen_function(struct cg_ctx *ctx,
 				     func->params[i]->type);
 		}
 
-		codegen_block(ctx, func->body, &result, &result_type);
+		if (codegen_block(ctx, func->body, &result, &result_type) < 0) {
+			pop_bindings_to(ctx, base);
+			ctx->current_func = NULL;
+			return -1;
+		}
 
 		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
 			if (result_type && is_heap_type(result_type))
@@ -1836,6 +2068,12 @@ static int build_module(struct helium_ir_program *prog,
 
 	for (i = 0; i < prog->function_count; i++)
 		declare_function(ctx, prog->functions[i]);
+
+	/* Field destructors must exist before any record_alloc references them. */
+	for (i = 0; i < prog->type_count; i++) {
+		if (record_type_needs_destroy(prog->types[i]))
+			emit_record_destroy(ctx, prog->types[i]);
+	}
 
 	for (i = 0; i < prog->function_count; i++) {
 		if (codegen_function(ctx, prog->functions[i]) < 0)

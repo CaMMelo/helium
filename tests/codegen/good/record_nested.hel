@@ -1,0 +1,13 @@
+// @name record_nested
+// @phase codegen
+// @expect success
+
+import std.io
+
+type Inner = { n: i32 };
+type Outer = { inner: Inner };
+
+main = () : IO<()> {
+    o = Outer{ inner: Inner{ n: 7 } };
+    io.print_int(o.inner.n)
+}

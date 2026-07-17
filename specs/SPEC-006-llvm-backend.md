@@ -46,6 +46,9 @@ Generate LLVM IR and native code from the monomorphic IR.
       array's data area.
 - [x] The compiler produces a native executable from a `.hel` file. End-to-end
       codegen tests compile, link, and run successfully.
+- [x] Record construction stores fields into the runtime record's data area
+      and field access loads them; unimplemented instruction kinds fail
+      compilation loudly instead of being silently dropped.
 
 ## Known issues
 

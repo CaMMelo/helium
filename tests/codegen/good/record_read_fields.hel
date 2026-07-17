@@ -1,0 +1,18 @@
+// @name record_read_fields
+// @phase codegen
+// @expect success
+
+import std.io
+
+type Required = { ok: bool, value: str, error: str };
+
+main = () : IO<()> {
+    r = Required{ error: "e", value: "v", ok: true };
+    io.println(r.value);
+    io.println(r.error);
+    if (r.ok) {
+        io.println("ok")
+    } else {
+        io.println("bad")
+    }
+}

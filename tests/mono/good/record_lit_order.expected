@@ -1,0 +1,13 @@
+program main=helium_main
+type Point
+    field x : i32
+    field y : i32
+    field z : i32
+function helium_main() -> IO<()>
+    block
+        let p : <?>
+            record_alloc Point
+                literal 1
+                literal 2
+                literal 3
+        foreign_call io_unit

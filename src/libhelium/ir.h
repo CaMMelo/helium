@@ -184,6 +184,7 @@ struct helium_ir_instr {
 		struct {
 			struct helium_ir_instr *object;
 			char *field_name;
+			char *type_name;
 		} record_get;
 		struct {
 			struct helium_ir_instr *object;
@@ -349,6 +350,7 @@ void helium_ir_record_alloc_add_field(struct helium_ir_instr *alloc,
 				      struct helium_ir_instr *value);
 struct helium_ir_instr *helium_ir_instr_record_get(struct helium_ir_instr *object,
 					   const char *field_name,
+					   const char *type_name,
 					   int line, int col);
 struct helium_ir_instr *helium_ir_instr_record_set(struct helium_ir_instr *object,
 					   const char *field_name,

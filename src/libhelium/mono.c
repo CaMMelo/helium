@@ -420,6 +420,24 @@ static void pop_locals_to(struct mono_ctx *ctx, size_t mark)
 /* Generic type specialization                                                */
 /* -------------------------------------------------------------------------- */
 
+static void ir_type_add_record_fields(struct helium_ir_type *ir_type,
+				      struct helium_type_def *def,
+				      struct helium_type **args,
+				      size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < def->u.record.field_count; i++) {
+		struct helium_record_field *f = def->u.record.fields[i];
+		struct helium_type *ft;
+		struct helium_ir_field *irf;
+
+		ft = subst_type(f->type, def->params, args, count);
+		irf = helium_ir_field_new(f->name, ft, f->line, f->col);
+		helium_ir_type_add_field(ir_type, irf);
+	}
+}
+
 static char *request_generic_type(struct mono_ctx *ctx,
 				  struct helium_type_def_info *info,
 				  struct helium_type **args,
@@ -450,15 +468,7 @@ static char *request_generic_type(struct mono_ctx *ctx,
 				     def->line, def->col);
 
 	if (def->kind == HELIUM_TYPE_DEF_RECORD) {
-		for (i = 0; i < def->u.record.field_count; i++) {
-			struct helium_record_field *f = def->u.record.fields[i];
-			struct helium_type *ft;
-			struct helium_ir_field *irf;
-
-			ft = subst_type(f->type, def->params, args, count);
-			irf = helium_ir_field_new(f->name, ft, f->line, f->col);
-			helium_ir_type_add_field(ir_type, irf);
-		}
+		ir_type_add_record_fields(ir_type, def, args, count);
 	} else {
 		for (i = 0; i < def->u.adt.variant_count; i++) {
 			struct helium_variant *v = def->u.adt.variants[i];
@@ -500,6 +510,34 @@ static char *request_type_by_name(struct mono_ctx *ctx,
 
 	return request_generic_type(ctx, info, type->args, type->arg_count,
 				    error);
+}
+
+/*
+ * Non-generic record types are never requested through
+ * request_generic_type(), but codegen still needs their field layout.
+ * Register every monomorphic record declaration up front.
+ */
+static void register_record_types(struct mono_ctx *ctx)
+{
+	size_t i;
+
+	for (i = 0; i < ctx->typed->module->decl_count; i++) {
+		struct helium_top_decl *decl = ctx->typed->module->decls[i];
+		struct helium_type_def *def;
+		struct helium_ir_type *ir_type;
+
+		if (decl->kind != HELIUM_DECL_TYPE)
+			continue;
+		def = decl->u.type_def;
+		if (def->kind != HELIUM_TYPE_DEF_RECORD || def->param_count != 0)
+			continue;
+		if (find_type(ctx, def->name))
+			continue;
+		ir_type = helium_ir_type_new(def->name, HELIUM_IR_TYPE_RECORD,
+					     def->line, def->col);
+		ir_type_add_record_fields(ir_type, def, NULL, 0);
+		helium_ir_program_add_type(ctx->prog, ir_type);
+	}
 }
 
 /* -------------------------------------------------------------------------- */
@@ -791,6 +829,31 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 			instr->type = subst_type(expr->inferred_type, names,
 					       args, count);
 			return instr;
+		}
+
+		/*
+		 * A foreign declaration of non-function type is a nullary
+		 * foreign function; referencing it as a value calls it.
+		 */
+		if (!name_in_locals(ctx, name)) {
+			struct helium_top_decl *decl;
+			size_t j;
+
+			for (j = 0; j < ctx->typed->module->decl_count; j++) {
+				decl = ctx->typed->module->decls[j];
+				if (decl->kind == HELIUM_DECL_FOREIGN &&
+				    strcmp(decl->u.foreign.name, name) == 0 &&
+				    (!decl->u.foreign.type ||
+				     decl->u.foreign.type->kind != HELIUM_TYPE_FN)) {
+					instr = helium_ir_instr_foreign_call(
+							name, expr->line,
+							expr->col);
+					instr->type = subst_type(
+						expr->inferred_type,
+						names, args, count);
+					return instr;
+				}
+			}
 		}
 
 		instr = helium_ir_instr_ident(name, expr->line, expr->col);
@@ -1259,6 +1322,7 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 
 	case HELIUM_EXPR_RECORD_LIT: {
 		struct helium_type *lit_type;
+		struct helium_type_def_info *info;
 		char *type_name;
 
 		lit_type = subst_type(expr->inferred_type, names, args, count);
@@ -1271,17 +1335,42 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 					     expr->col);
 		free(type_name);
 
-		for (i = 0; i < expr->u.record_lit.field_count; i++) {
-			struct helium_ir_instr *fv;
+		/*
+		 * Append field values in declaration order so the positional
+		 * layout matches codegen regardless of literal order.
+		 * Inference already proved the literal covers every field
+		 * exactly once, so the lookup and the name match are total.
+		 */
+		info = helium_env_lookup_def(ctx->typed->env,
+					     expr->u.record_lit.name);
+		if (!info) {
+			format_error(error,
+				     "%d:%d: internal error: unknown record '%s'",
+				     expr->line, expr->col,
+				     expr->u.record_lit.name);
+			helium_ir_instr_free(instr);
+			return NULL;
+		}
+		for (i = 0; i < info->def->u.record.field_count; i++) {
+			const char *fname = info->def->u.record.fields[i]->name;
+			size_t j;
 
-			fv = translate_expr(ctx,
-					    expr->u.record_lit.fields[i]->value,
-					    names, args, count, error);
-			if (!fv) {
-				helium_ir_instr_free(instr);
-				return NULL;
+			for (j = 0; j < expr->u.record_lit.field_count; j++) {
+				struct helium_ir_instr *fv;
+
+				if (strcmp(expr->u.record_lit.fields[j]->name,
+					   fname) != 0)
+					continue;
+				fv = translate_expr(ctx,
+						    expr->u.record_lit.fields[j]->value,
+						    names, args, count, error);
+				if (!fv) {
+					helium_ir_instr_free(instr);
+					return NULL;
+				}
+				helium_ir_record_alloc_add_field(instr, fv);
+				break;
 			}
-			helium_ir_record_alloc_add_field(instr, fv);
 		}
 		instr->type = subst_type(expr->inferred_type, names, args,
 				       count);
@@ -1319,14 +1408,29 @@ static struct helium_ir_instr *translate_expr(struct mono_ctx *ctx,
 
 	case HELIUM_EXPR_FIELD: {
 		struct helium_ir_instr *object;
+		struct helium_type *object_type;
+		char *type_name;
 
 		object = translate_expr(ctx, expr->u.field.object, names, args,
 					count, error);
 		if (!object)
 			return NULL;
+		object_type = subst_type(expr->u.field.object->inferred_type,
+					 names, args, count);
+		type_name = request_type_by_name(ctx, object_type, error);
+		helium_type_free(object_type);
+		if (!type_name) {
+			format_error(error,
+				     "%d:%d: internal error: field access on non-record type",
+				     expr->line, expr->col);
+			helium_ir_instr_free(object);
+			return NULL;
+		}
 		instr = helium_ir_instr_record_get(object,
 					   expr->u.field.name,
+					   type_name,
 					   expr->line, expr->col);
+		free(type_name);
 		instr->type = subst_type(expr->inferred_type, names, args,
 				       count);
 		return instr;
@@ -1822,6 +1926,7 @@ struct helium_ir_program *helium_monomorphize(struct helium_typed_module *typed,
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.typed = typed;
 	ctx.prog = helium_ir_program_new();
+	register_record_types(&ctx);
 
 	if (generate_main(&ctx, error) < 0) {
 		helium_ir_program_free(ctx.prog);
@@ -1850,6 +1955,7 @@ struct helium_ir_program *helium_monomorphize_module(
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.typed = typed;
 	ctx.prog = helium_ir_program_new();
+	register_record_types(&ctx);
 
 	if (generate_all_functions(&ctx, error) < 0) {
 		helium_ir_program_free(ctx.prog);
