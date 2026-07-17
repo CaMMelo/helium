@@ -487,6 +487,7 @@ struct helium_top_decl {
 			struct helium_type *type;
 			char **type_params;
 			size_t type_param_count;
+			int injected;
 		} foreign;
 	} u;
 };

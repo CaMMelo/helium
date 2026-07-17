@@ -1,0 +1,7 @@
+// @skip not a test; module used by module_unknown_import.hel
+
+module badmod;
+
+import does_not_exist
+
+x = (): i32 { 0 };

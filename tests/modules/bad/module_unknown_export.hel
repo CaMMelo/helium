@@ -1,0 +1,9 @@
+// @name module_unknown_export
+// @phase modules
+// @expect error
+
+import badmod2
+
+main = () : IO<()> {
+    0
+}

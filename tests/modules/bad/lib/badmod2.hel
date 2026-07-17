@@ -1,0 +1,7 @@
+// @skip not a test; module used by module_unknown_export.hel
+
+module badmod2;
+
+import std.string
+
+nope = (a: str, b: str): bool { string.nope(a, b) };

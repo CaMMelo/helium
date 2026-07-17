@@ -1,0 +1,11 @@
+// @name module_chain
+// @phase modules
+// @expect success
+// @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; printf "module leaf;\n\nadd = (a: i32, b: i32): i32 { a + b };\n" > "$tmp/leaf.hel"; printf "module mid;\n\nimport leaf\n\nadd2 = (a: i32, b: i32): i32 {\n    leaf.add(a, b)\n};\n" > "$tmp/mid.hel"; printf "import std.io\nimport mid\n\nmain = () : IO<()> {\n    io.print_int(mid.add2(2, 3));\n    io.println(\"\");\n}\n" > "$tmp/main.hel"; ./build/bin/helium -I libs/std/.helium/std/0.1.0 -L libs/std/.helium/std/0.1.0 -l std -I "$tmp" "$tmp/main.hel" -o "$tmp/a.out" && "$tmp/a.out"'
+// @match ^5$
+
+// This test is driven by the @command above: it builds an entry -> mid -> leaf
+// module chain in a hermetic temp dir, proving that objects of transitively
+// compiled modules (leaf.o) reach the entry's link line.  A hermetic dir is
+// required because stale .o/.hei next to the sources would skip on-demand
+// compilation and mask the object-propagation path.

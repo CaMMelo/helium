@@ -57,3 +57,6 @@ length<T> : fn([T; 0]) -> i32
       library.
 - [x] Missing modules and name resolution failures produce clear errors.
 - [x] End-to-end codegen tests for modules and FFI produce runnable binaries.
+- [x] A module with its own imports (e.g. a lib module importing `std.string`)
+      compiles to `.o`/`.hei`; the emitted `.hei` exports only the module's own
+      names; dependents link and run.

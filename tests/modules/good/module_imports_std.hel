@@ -1,0 +1,13 @@
+// @name module_imports_std
+// @phase modules
+// @expect success
+
+import std.io
+import strutil
+
+main = () : IO<()> {
+    io.print_bool(strutil.same("helium", "helium"));
+    io.println("");
+    io.print_bool(strutil.same("helium", "hlm"));
+    io.println("");
+}

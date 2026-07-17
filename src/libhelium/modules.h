@@ -132,6 +132,14 @@ struct helium_import_info *helium_import_context_lookup(
 				struct helium_import_context *ctx,
 				const char *prefix);
 
+/*
+ * Append an object path to the context's link list, skipping duplicates.
+ * Used to propagate objects of transitively compiled modules to the
+ * consumer's link line.
+ */
+void helium_import_context_add_object(struct helium_import_context *ctx,
+				      const char *object_path);
+
 /* -------------------------------------------------------------------------- */
 /* AST rewriting                                                              */
 /* -------------------------------------------------------------------------- */

@@ -173,6 +173,9 @@ static int compile_module_source(const char *source_path,
 				 struct helium_module_interface **iface_out,
 				 char **error);
 
+static void inject_imported_decls(struct helium_module *module,
+				  struct helium_import_context *ctx);
+
 static struct helium_search_path *build_search_path(const char *source_path,
 					    const char *const *module_paths)
 {
@@ -275,6 +278,14 @@ static int compile_module_source(const char *source_path,
 	if (collect_imports(module, source_path, ctx, module_paths, error) < 0)
 		goto out;
 
+	if (parent_ctx) {
+		size_t i;
+
+		for (i = 0; i < ctx->object_count; i++)
+			helium_import_context_add_object(parent_ctx,
+							 ctx->object_paths[i]);
+	}
+
 	module_name = module->name ? xstrdup(module->name) :
 			     replace_extension(source_path, "");
 	{
@@ -291,6 +302,7 @@ static int compile_module_source(const char *source_path,
 	helium_rewrite_qualified_access(module, ctx);
 	if (parent_ctx)
 		helium_rewrite_qualified_access(module, parent_ctx);
+	inject_imported_decls(module, ctx);
 
 	if (helium_infer_module_no_main(module, &typed, error) < 0)
 		goto out;
@@ -405,6 +417,7 @@ static void inject_imported_decls(struct helium_module *module,
 						   exp->type_param_count,
 						   helium_type_copy(exp->type),
 						   0, 0);
+			decl->u.foreign.injected = 1;
 			free(mangled);
 			module_insert_decl_at(module, decl, 0);
 		}

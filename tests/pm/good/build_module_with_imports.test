@@ -1,0 +1,5 @@
+# @name build_module_with_imports
+# @phase pm
+# @expect success
+# @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; hel=$(pwd)/build/bin/hel; repo=$(pwd); "$hel" init "$tmp/pkg" >"$tmp/out.txt" 2>&1; (cd "$tmp/pkg" && { mkdir -p lib/std; cp "$repo"/libs/std/lib/std/*.hel lib/std/; cp -r "$repo"/libs/std/lib/std/csrc lib/std/; printf "module math;\n\nimport std.string\n\nsame = (a: str, b: str): bool { string.equals(a, b) };\n" > lib/math.hel; printf "import std.io\nimport math\n\nmain = () : IO<()> {\n    io.print_bool(math.same(\"helium\", \"helium\"));\n    io.println(\"\");\n}\n" > src/main.hel; "$hel" build && test -f .helium/*/*/math.hei && ! grep -q string_equals .helium/*/*/math.hei && "$hel" run; }) >>"$tmp/out.txt" 2>&1; rc=$?; cat "$tmp/out.txt"; exit $rc'
+# @match ^true$

@@ -698,6 +698,9 @@ int helium_module_interface_emit(struct helium_module *module,
 		char *type_str;
 		const char *name = NULL;
 
+		if (decl->kind == HELIUM_DECL_FOREIGN && decl->u.foreign.injected)
+			continue;
+
 		if (decl->kind == HELIUM_DECL_BINDING)
 			name = decl->u.binding->name;
 		else if (decl->kind == HELIUM_DECL_FOREIGN)
@@ -1041,6 +1044,19 @@ struct helium_import_info *helium_import_context_add(
 	return info;
 }
 
+void helium_import_context_add_object(struct helium_import_context *ctx,
+				      const char *object_path)
+{
+	size_t i;
+
+	for (i = 0; i < ctx->object_count; i++) {
+		if (strcmp(ctx->object_paths[i], object_path) == 0)
+			return;
+	}
+	append_ptr((void ***)&ctx->object_paths, &ctx->object_count,
+		   &ctx->object_capacity, xstrdup(object_path));
+}
+
 struct helium_import_info *helium_import_context_lookup(
 				struct helium_import_context *ctx,
 				const char *prefix)
@@ -1069,6 +1085,9 @@ static void collect_module_binding_names(struct helium_module *module,
 	for (i = 0; i < module->decl_count; i++) {
 		struct helium_top_decl *decl = module->decls[i];
 		const char *name = NULL;
+
+		if (decl->kind == HELIUM_DECL_FOREIGN && decl->u.foreign.injected)
+			continue;
 
 		if (decl->kind == HELIUM_DECL_BINDING)
 			name = decl->u.binding->name;
@@ -1226,7 +1245,8 @@ void helium_prefix_module_names(struct helium_module *module,
 
 			free(decl->u.binding->name);
 			decl->u.binding->name = new_name;
-		} else if (decl->kind == HELIUM_DECL_FOREIGN) {
+		} else if (decl->kind == HELIUM_DECL_FOREIGN &&
+			   !decl->u.foreign.injected) {
 			char *new_name = prefix_name(module_name,
 						     decl->u.foreign.name);
 

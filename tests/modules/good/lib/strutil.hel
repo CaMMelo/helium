@@ -1,0 +1,7 @@
+// @skip not a test; module used by module_imports_std.hel
+
+module strutil;
+
+import std.string
+
+same = (a: str, b: str): bool { string.equals(a, b) };
