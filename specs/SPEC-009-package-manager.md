@@ -93,14 +93,14 @@ Implement the `hel` command-line package manager.
 - [x] Error cases (missing dependency, lock mismatch) are reported clearly.
 - [x] `hel run` and `hel test` succeed for projects whose tests require
       end-to-end code generation.
-- [ ] `hel build` compiles `lib/<pkg>/csrc/**/*.c`, archives the objects as
+- [x] `hel build` compiles `lib/<pkg>/csrc/**/*.c`, archives the objects as
       `build/lib/<pkg>/lib<pkg>.a`, and installs the archive to
       `.helium/<pkg>/<version>/lib<pkg>.a`.
-- [ ] Every cached package archive is linked into the final binary, for local
+- [x] Every cached package archive is linked into the final binary, for local
       packages and cached dependencies alike.
-- [ ] A package with csrc but no `.hel` modules is built, installed, and
+- [x] A package with csrc but no `.hel` modules is built, installed, and
       linked.
-- [ ] csrc compile and archive failures produce the specified errors and a
+- [x] csrc compile and archive failures produce the specified errors and a
       non-zero exit.
-- [ ] Library mode: `hel build` without `src/main.hel` builds and installs
+- [x] Library mode: `hel build` without `src/main.hel` builds and installs
       local modules and archives, prints `Built libraries`, and exits 0.

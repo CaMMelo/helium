@@ -126,8 +126,9 @@ SPEC-005  ->  SPEC-006
   interface files, and foreign declarations work end-to-end.
 - SPEC-008 standard library: in progress. Relocating to the `libs/std`
   package with io implemented in package C sources (csrc).
-- SPEC-009 package manager: in progress. Adding package csrc compilation,
-  `lib<pkg>.a` install/link, and library mode.
+- SPEC-009 package manager: complete. Package csrc is compiled and archived
+  as `lib<pkg>.a`, cached archives link into the final binary, and library
+  mode builds packages without `src/main.hel`.
 - SPEC-010 testing framework: complete. Phase-specific harnesses, the general
   harness, and CI all run `make test` with passing codegen tests.
 - SPEC-011 compiler driver: complete. The driver emits AST/IR/LLVM, reports
