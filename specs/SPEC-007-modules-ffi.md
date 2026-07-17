@@ -32,7 +32,9 @@ interface.
 6. Allow `foreign name : Type;` declarations, including generic foreign
    declarations of the form `foreign name<T> : Type;`.
 7. Generate correct calling-convention glue for foreign functions.
-8. Link foreign libraries specified in `Heliumfile`.
+8. Link foreign libraries specified in `Heliumfile`. Package C archives
+   produced by `hel` (SPEC-009) are a package-manager-level linking concern,
+   distinct from `link =` flags in a Heliumfile.
 
 ## Interface file format
 

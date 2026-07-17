@@ -124,10 +124,10 @@ SPEC-005  ->  SPEC-006
   are all verified.
 - SPEC-007 modules and FFI: complete. Local modules, cached dependencies,
   interface files, and foreign declarations work end-to-end.
-- SPEC-008 standard library: complete. `lib/std/io.hel` and runtime entry points
-  are implemented and tested.
-- SPEC-009 package manager: complete. `hel init/build/run/test/add/remove/update`
-  are implemented and produce runnable binaries for code-generating projects.
+- SPEC-008 standard library: in progress. Relocating to the `libs/std`
+  package with io implemented in package C sources (csrc).
+- SPEC-009 package manager: in progress. Adding package csrc compilation,
+  `lib<pkg>.a` install/link, and library mode.
 - SPEC-010 testing framework: complete. Phase-specific harnesses, the general
   harness, and CI all run `make test` with passing codegen tests.
 - SPEC-011 compiler driver: complete. The driver emits AST/IR/LLVM, reports
@@ -136,4 +136,7 @@ SPEC-005  ->  SPEC-006
   - `main` can accept command-line arguments as `[str]`.
   - The repository `lib/` directory is no longer implicitly added to `hel`
     search paths; the standard library must be added to a project manually.
+  - Packages shipped with the compiler repository live under `libs/<pkg>/`
+    (starting with `libs/std`) and are built and consumed like any other
+    package through the `.helium/` cache.
 - Next major goal: Phase 4 — self-hosting compiler.

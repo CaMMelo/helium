@@ -30,9 +30,14 @@ function integration.
 5. Provide a `helium_main_wrapper` that receives `argc`/`argv` from the C
    runtime, builds a Helium array of strings when `main` expects arguments,
    invokes `main`, and exits with a status code.
-6. Provide C entry points for the standard-library IO operations that are
-   declared as `foreign` in `lib/std/io.hel` (e.g. `io_println`, `io_prints`,
-   `io_printi`). String interpolation is generated inline by the backend.
+6. The runtime exports reference counting (`helium_retain`, `helium_release`)
+   and the allocation helpers above, `helium_array_length`,
+   `helium_array_get_str`, `helium_main_wrapper`, `io_unit` (needed by the
+   `hel init` scaffold and import-free codegen tests), `string_length`, and
+   `list_length`. The io entry points (`io_println`, `io_prints`,
+   `io_print_int`, `io_print_bool`, `io_read_line`) move to the `libs/std`
+   package's csrc (SPEC-008). The dead `helium_format_*` helpers are deleted:
+   f-strings lower to `snprintf` in codegen.
 
 ## Acceptance criteria
 

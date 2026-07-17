@@ -62,9 +62,12 @@ re-reading the source.
 
 ## 6. Standard library
 
-The standard library is a normal package named `std`. It is not special-cased
-by the compiler except that the package manager may provide a convenient way to
-reference it.
+The standard library lives in the `libs/std` package in the compiler
+repository. It is a normal package named `std`: `hel build` compiles its
+modules and its `csrc/` C sources, installs them into the project's
+`.helium/` cache, and links `libstd.a` into the final binary. It is not
+special-cased by the compiler except that the package manager may provide a
+convenient way to reference it.
 
 ```helium
 import std.io;
@@ -96,6 +99,14 @@ For lambdas, the following equivalent forms are also accepted:
 ```helium
 main = () : IO<()> { ... }
 main = (args: [str]) : IO<()> { ... }
+```
+
+Projects normally consume `std` through `hel`. To use the `helium` driver
+directly, build the package once with `hel build` inside `libs/std` and then
+point the driver at the package's own cache:
+
+```
+helium -I libs/std/.helium/std/0.1.0 -L libs/std/.helium/std/0.1.0 -lstd main.hel -o main
 ```
 
 ## 7. Invalid module usage

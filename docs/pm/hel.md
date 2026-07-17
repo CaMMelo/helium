@@ -61,11 +61,28 @@ Steps:
      `.helium/<pkg>/<version>/`, using the project version from `Heliumfile`.
    Local libraries are therefore made available to `src/main.hel` through the
    `.helium/` cache, not through the raw `lib/` directory.
-4. Invoke the Helium compiler on `src/main.hel`.  The compiler is given only
+4. Compile package C sources. For each `lib/<pkg>/csrc/` directory, every
+   `*.c` file found recursively (in sorted order) is compiled with
+   `cc -std=c11 -O2 -g -Wall -Wextra -Ilib/<pkg>/csrc -c <file> -o build/lib/<pkg>/csrc/<relative-path>.o`.
+   If a package produced at least one object, the objects are archived with
+   `ar rcs build/lib/<pkg>/lib<pkg>.a <objects...>` and the archive is
+   installed to `.helium/<pkg>/<version>/lib<pkg>.a` next to the installed
+   modules. A package with csrc but no `.hel` modules is still built and
+   installed.
+5. Invoke the Helium compiler on `src/main.hel`.  The compiler is given only
    the explicit `.helium/<name>/<version>/` cache directories as module search
    paths; it does not walk ancestor directories or implicitly add `lib/`.
-5. Link the resulting objects and any required `.so`/`.o` dependencies.
-6. Place the final binary in `build/`.
+6. Link the resulting objects together with the full path of every
+   `lib<pkg>.a` archive found in the cached version directories
+   (`.helium/<pkg>/<version>/`, sorted); `hel` passes them through the
+   compiler's `extra_libs` mechanism, so local packages and cached
+   dependencies are linked uniformly and transitively.
+7. Place the final binary in `build/`.
+
+If `src/main.hel` is absent, `hel build` runs in library mode: it still
+compiles local modules and package C sources (steps 3–4); if at least one
+module or archive was installed it prints `Built libraries` and exits 0; if
+nothing was produced it keeps the existing `error: src/main.hel not found`.
 
 `hel build` does not create symlinks of `Heliumfile`, `Heliumfile.lock`, or `.helium` inside `src/`.
 
@@ -117,22 +134,31 @@ std = { version = "0.1.0", registry = "https://packages.helium.dev" }
 
 ## 4. Dependency layout
 
-Dependencies are stored as compiled artifacts plus interface metadata:
+Dependencies are stored as compiled artifacts plus interface metadata, flat
+inside each version directory:
 
 ```
 .helium/
 └── std/
     └── 0.1.0/
-        ├── libstd.so
-        ├── libstd.o
-        └── interface/
-            └── io.hei
+        ├── io.hel
+        ├── io.hei
+        ├── io.o
+        ├── string.hel
+        ├── string.hei
+        ├── string.o
+        ├── list.hel
+        ├── list.hei
+        ├── list.o
+        └── libstd.a
 ```
 
-The compiler uses the interface files for type checking and the object/shared
-files for linking. In the bootstrap implementation the cache must also contain
-a matching `.hel` source stub so the compiler can resolve the import path; the
-stub is not recompiled when the object and interface files are up to date.
+Each module contributes a `.hel` source stub, a `.hei` interface file, and a
+`.o` object file; `lib<pkg>.a` is present when the package ships C sources
+under `csrc/`. The compiler uses the interface files for type checking and
+the object files and archives for linking. The `.hel` stub is required so the
+compiler can resolve the import path; the stub is not recompiled when the
+object and interface files are up to date.
 
 Local libraries follow the same cache layout: a project with `lib/std/io.hel`
 and version `0.1.0` installs the compiled module to

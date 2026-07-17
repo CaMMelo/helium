@@ -1,20 +1,28 @@
 # SPEC-008: Standard Library Bootstrap
 
+**Status:** in progress (reopened)
+
 ## Goal
 
 Create the minimal standard library needed to write useful Helium programs,
-without compiler magic.
+without compiler magic. The standard library lives in the `libs/std` package;
+its effectful functions are implemented in package C sources and linked by
+`hel` (SPEC-009).
 
 ## Dependencies
 
 - SPEC-006 LLVM Backend
 - SPEC-007 Modules and FFI
+- SPEC-009 Package Manager (csrc compilation and archive linking)
 
 ## Deliverables
 
-- `lib/std/io.hel`
-- `lib/std/string.hel`
-- `lib/std/list.hel`
+- `libs/std/Heliumfile`
+- `libs/std/lib/std/io.hel`
+- `libs/std/lib/std/string.hel`
+- `libs/std/lib/std/list.hel`
+- `libs/std/lib/std/csrc/io.c`
+- `libs/std/lib/std/csrc/string.c`
 - Tests in `tests/stdlib/`.
 
 ## Requirements
@@ -25,7 +33,10 @@ without compiler magic.
    - `print_int : i32 -> IO<()>`
    - `print_bool : bool -> IO<()>`
    - `read_line : () -> IO<str>` (reads a line from stdin)
-2. These functions must be implemented via FFI to C runtime helpers.
+2. The io functions are implemented in the package's `csrc/` C sources
+   (`libs/std/lib/std/csrc/io.c`) and compiled, archived, installed, and
+   linked by `hel` per SPEC-009; they are declared `foreign` in
+   `libs/std/lib/std/io.hel`. Only `io_unit` remains in the runtime.
 3. No special compiler support for `io.println`; it is an ordinary imported
    function.
 4. `IO<T>` values are sequenced with the `>>=` operator.  Generic `pure` and
@@ -35,6 +46,10 @@ without compiler magic.
 5. `std.string` must provide:
    - `length : str -> i32`
    - `is_empty : str -> bool`
+   - `equals : fn(str, str) -> bool` — content equality via `strcmp`,
+     implemented in `libs/std/lib/std/csrc/string.c`. Justified because the
+     language has no string content comparison; `==` on `str` is pointer
+     comparison.
 6. `std.list` documents that arrays are the list-like aggregate in this
    bootstrap.  Generic `map`/`filter`/`fold` are deferred because they require
    dynamic allocation or element access not yet exposed to library code through
@@ -43,18 +58,21 @@ without compiler magic.
 
 ## Acceptance criteria
 
-- [x] `import std.io; main = () : IO<()> { io.println("Hello"); }` compiles and
-      prints "Hello".
-- [x] Chained IO actions with `>>=` work using standard library functions.
-- [x] `std.string` functions work via FFI.
-- [x] `std.list` provides a working array length demonstration.
-- [x] Standard library is packaged and installable by `hel`.
-- [x] Good and bad case tests exist under `tests/stdlib/`.
+- [ ] `import std.io; main = () : IO<()> { io.println("Hello"); }` compiles in
+      a project that depends on the `libs/std` package and prints "Hello".
+- [ ] Chained IO actions with `>>=` work using standard library functions.
+- [ ] `std.string` functions, including `equals`, work via FFI to the
+      package's csrc.
+- [ ] `std.list` provides a working array length demonstration.
+- [ ] The standard library builds as the `libs/std` package and is installed
+      and linked by `hel` per the SPEC-009 csrc convention.
+- [ ] Good and bad case tests exist under `tests/stdlib/`.
 
 ## Notes
 
 - `str` is represented as a C string pointer in the bootstrap runtime, so
-  `std.string.length` is implemented with `strlen`.
+  `std.string.length` is implemented with `strlen` and `std.string.equals`
+  with `strcmp`.
 - Arrays are represented as `helium_array_t` pointers; `std.list.length` reads
   the runtime `length` field.  It is declared as a generic foreign function
   `length<T> : fn([T; 0]) -> i32`, so it can be used with arrays of any
