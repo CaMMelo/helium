@@ -49,7 +49,14 @@ Generate LLVM IR and native code from the monomorphic IR.
 - [x] Record construction stores fields into the runtime record's data area
       and field access loads them; unimplemented instruction kinds fail
       compilation loudly instead of being silently dropped.
+- [x] F-string results are heap-allocated runtime strings via
+      `helium_alloc_string`; escaping f-strings read correctly; same-function
+      temporaries are released.
 
 ## Known issues
 
-None.
+- Escaped f-strings (returned values, record/variant fields) are not
+  reclaimed because `str` is a borrowed C-string pointer at the type level;
+  full `str` reference counting is future work. A function returning a
+  borrowed `str` parameter that aliases an f-string temporary also dangles,
+  because callees borrow `str` arguments.

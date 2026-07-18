@@ -1,0 +1,12 @@
+// @name fstring_long
+// @phase codegen
+// @expect success
+// @note The interpolated result is 320 bytes; the old stack-buffer codegen
+// @note truncated at 255.  Pins the two-pass snprintf sizing.
+
+import std.io
+
+main = () : IO<()> {
+    a = "01234567890123456789012345678901234567890123456789012345678901234567890123456789";
+    io.println(f"{a}{a}{a}{a}")
+}

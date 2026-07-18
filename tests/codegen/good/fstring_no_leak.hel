@@ -1,0 +1,22 @@
+// @name fstring_no_leak
+// @phase codegen
+// @expect success
+// @note Same-function f-strings are released after use.  Verified leak-free
+// @note with valgrind: 4 allocs / 4 frees for 3 iterations.
+
+import std.io
+
+print_tick = (n: i32): IO<()> {
+    io.println(f"tick {n}")
+};
+
+rec_ticks = (n: i32): IO<()> {
+    if (n == 0) {
+        io.println("done")
+    } else {
+        print_tick(n);
+        rec_ticks(n - 1)
+    }
+};
+
+main = rec_ticks(3)

@@ -1,0 +1,21 @@
+// @name fstring_escape_nested
+// @phase codegen
+// @expect success
+// @note inner binds the f-string with let and returns it (move-on-return);
+// @note outer returns the call result.  The escaped string is intentionally
+// @note leaked at the call site, as in fstring_return.
+
+import std.io
+
+inner = (name: str): str {
+    s = f"missing {name}";
+    s
+};
+
+outer = (name: str): str {
+    inner(name)
+};
+
+main = () : IO<()> {
+    io.println(outer("world"))
+}

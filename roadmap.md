@@ -124,7 +124,9 @@ SPEC-005  ->  SPEC-006
   are all verified. Record construction stores fields in declaration order and
   field access loads them (with generated field destructors for heap-typed
   fields); instructions codegen cannot translate fail compilation with a
-  located error instead of being silently dropped.
+  located error instead of being silently dropped. F-string results are
+  heap-allocated RC strings, so f-strings that escape their defining function
+  read correctly (escaped strings are not yet reclaimed; see Known issues).
 - SPEC-007 modules and FFI: complete. Local modules, cached dependencies,
   interface files, and foreign declarations work end-to-end.
   Modules with their own imports compile and link transitively: imported

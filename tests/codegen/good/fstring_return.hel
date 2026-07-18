@@ -1,0 +1,16 @@
+// @name fstring_return
+// @phase codegen
+// @expect success
+// @note greet's f-string escapes its defining function.  The returned string
+// @note is intentionally leaked: call-site str returns cannot be owned because
+// @note str is a borrowed C-string pointer at the type level.
+
+import std.io
+
+greet = (name: str): str {
+    f"missing {name}"
+};
+
+main = () : IO<()> {
+    io.println(greet("world"))
+}

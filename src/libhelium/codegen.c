@@ -93,6 +93,13 @@ static int is_io_type(struct helium_type *type)
 	return strcmp(type->name, "IO") == 0;
 }
 
+static int is_str_type(struct helium_type *type)
+{
+	if (!type || type->kind != HELIUM_TYPE_NAMED)
+		return 0;
+	return strcmp(type->name, "str") == 0;
+}
+
 static int instr_is_owned_heap_value(struct helium_ir_instr *instr)
 {
 	if (!instr)
@@ -104,6 +111,16 @@ static int instr_is_owned_heap_value(struct helium_ir_instr *instr)
 		instr->kind == HELIUM_IR_INSTR_VARIANT_ALLOC ||
 		instr->kind == HELIUM_IR_INSTR_ARRAY_ALLOC ||
 		instr->kind == HELIUM_IR_INSTR_CALL;
+}
+
+/*
+ * F-string results are heap-allocated RC strings owned by the current
+ * scope.  Ownership is per-instruction: only an FSTRING instruction
+ * produces such a value, so str stays non-heap at the type level.
+ */
+static int instr_is_owned_string(struct helium_ir_instr *instr)
+{
+	return instr && instr->kind == HELIUM_IR_INSTR_FSTRING;
 }
 
 static int is_unit_type(struct helium_type *type)
@@ -206,6 +223,7 @@ static void emit_retain(struct cg_ctx *ctx, LLVMValueRef value,
 			struct helium_type *type);
 static void emit_release(struct cg_ctx *ctx, LLVMValueRef value,
 			 struct helium_type *type);
+static void emit_string_release(struct cg_ctx *ctx, LLVMValueRef value);
 
 static void mark_result_moved(struct cg_ctx *ctx, LLVMValueRef value)
 {
@@ -226,8 +244,12 @@ static void release_owned_bindings(struct cg_ctx *ctx, size_t target)
 	for (i = ctx->binding_count; i > target; i--) {
 		struct cg_binding *b = &ctx->bindings[i - 1];
 
-		if (b->owned && !b->moved && is_heap_type(b->type))
+		if (!b->owned || b->moved)
+			continue;
+		if (is_heap_type(b->type))
 			emit_release(ctx, b->value, b->type);
+		else if (is_str_type(b->type))
+			emit_string_release(ctx, b->value);
 	}
 }
 
@@ -668,6 +690,7 @@ static LLVMValueRef codegen_call(struct cg_ctx *ctx,
 	const char *name;
 	LLVMValueRef fn;
 	LLVMValueRef *args;
+	LLVMValueRef call;
 	LLVMTypeRef func_type;
 	LLVMTypeRef *arg_types;
 	LLVMTypeRef ret_type;
@@ -714,8 +737,20 @@ static LLVMValueRef codegen_call(struct cg_ctx *ctx,
 		}
 	}
 
-	return LLVMBuildCall2(ctx->builder, func_type, fn, args, arg_count,
+	call = LLVMBuildCall2(ctx->builder, func_type, fn, args, arg_count,
 			      "call");
+
+	/* F-string arguments are owned temporaries the callee borrows. */
+	for (i = 0; i < arg_count; i++) {
+		struct helium_ir_instr *arg;
+
+		arg = is_foreign ? instr->u.foreign_call.args[i] :
+				   instr->u.call.args[i];
+		if (instr_is_owned_string(arg))
+			emit_string_release(ctx, args[i]);
+	}
+
+	return call;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -729,6 +764,34 @@ static LLVMValueRef codegen_call(struct cg_ctx *ctx,
  */
 #define RECORD_DATA_OFFSET	32
 #define RECORD_FIELD_SIZE	8
+
+/*
+ * String layout matches the frozen runtime: helium_string_t.data starts at
+ * byte offset 32 on 64-bit (helium_object header 24 + length 8).
+ */
+#define STRING_DATA_OFFSET	32
+
+/*
+ * Release an f-string result.  The str value points at the data area of a
+ * helium_string_t, so recover the object header before releasing.
+ */
+static void emit_string_release(struct cg_ctx *ctx, LLVMValueRef value)
+{
+	LLVMValueRef fn;
+	LLVMValueRef args[1];
+	LLVMValueRef offset;
+	LLVMBasicBlockRef bb;
+
+	bb = LLVMGetInsertBlock(ctx->builder);
+	if (!bb || LLVMGetBasicBlockTerminator(bb))
+		return;
+	fn = get_release_fn(ctx);
+	offset = LLVMConstInt(ctx->i64_type, -STRING_DATA_OFFSET, 1);
+	args[0] = LLVMBuildGEP2(ctx->builder, ctx->i8_type, value, &offset, 1,
+				"fstr_obj");
+	LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+		       fn, args, 1, "");
+}
 
 static struct helium_ir_type *find_ir_type(struct cg_ctx *ctx, const char *name)
 {
@@ -1425,7 +1488,7 @@ static LLVMValueRef codegen_instr_block(struct cg_ctx *ctx,
 		pop_bindings_to(ctx, base);
 		return NULL;
 	}
-	if (result && result_type && is_heap_type(result_type))
+	if (result)
 		mark_result_moved(ctx, result);
 	release_owned_bindings(ctx, base);
 	pop_bindings_to(ctx, base);
@@ -1444,7 +1507,8 @@ static LLVMValueRef codegen_let(struct cg_ctx *ctx,
 		    instr->u.let.value->type;
 	push_binding(ctx, instr->u.let.name, value, bind_type);
 	ctx->bindings[ctx->binding_count - 1].owned =
-		instr_is_owned_heap_value(instr->u.let.value);
+		instr_is_owned_heap_value(instr->u.let.value) ||
+		instr_is_owned_string(instr->u.let.value);
 	return value;
 }
 
@@ -1493,10 +1557,16 @@ static LLVMValueRef codegen_fstring(struct cg_ctx *ctx,
 	LLVMValueRef args[16];
 	LLVMTypeRef snprintf_type;
 	LLVMValueRef snprintf_fn;
-	LLVMValueRef buf;
+	LLVMTypeRef alloc_type;
+	LLVMValueRef alloc_fn;
+	LLVMValueRef alloc_args[1];
+	LLVMValueRef obj;
+	LLVMValueRef data_offset;
+	LLVMValueRef data;
+	LLVMValueRef len32;
+	LLVMValueRef len;
 	LLVMValueRef size;
 	LLVMValueRef call_args[3 + 16];
-	LLVMValueRef call;
 	size_t i;
 	unsigned arg_count = 0;
 	char format_buf[256];
@@ -1544,11 +1614,6 @@ static LLVMValueRef codegen_fstring(struct cg_ctx *ctx,
 	}
 
 	fmt = emit_cstring(ctx, format_buf);
-	size = LLVMConstInt(ctx->i64_type, 256, 0);
-
-	buf = LLVMBuildAlloca(ctx->builder,
-			      LLVMArrayType(ctx->i8_type, 256),
-			      "fstr_buf");
 
 	snprintf_type = LLVMFunctionType(ctx->i32_type,
 					 (LLVMTypeRef[]){ ctx->ptr_type,
@@ -1557,17 +1622,37 @@ static LLVMValueRef codegen_fstring(struct cg_ctx *ctx,
 					 3, 1);
 	snprintf_fn = get_runtime_function(ctx, "snprintf", snprintf_type);
 
-	call_args[0] = buf;
-	call_args[1] = size;
+	/* First pass: measure the formatted output. */
+	call_args[0] = LLVMConstPointerNull(ctx->ptr_type);
+	call_args[1] = LLVMConstInt(ctx->i64_type, 0, 0);
 	call_args[2] = fmt;
 	for (i = 0; i < arg_count; i++)
 		call_args[3 + i] = args[i];
+	len32 = LLVMBuildCall2(ctx->builder, snprintf_type, snprintf_fn,
+			       call_args, 3 + arg_count, "len");
+	len = LLVMBuildZExt(ctx->builder, len32, ctx->i64_type, "len64");
 
-	call = LLVMBuildCall2(ctx->builder, snprintf_type, snprintf_fn,
-			      call_args, 3 + arg_count, "snprintf");
-	(void)call;
+	/* The result is a heap-allocated RC runtime string. */
+	alloc_type = LLVMFunctionType(ctx->ptr_type,
+				      (LLVMTypeRef[]){ ctx->i64_type }, 1, 0);
+	alloc_fn = get_runtime_function(ctx, "helium_alloc_string", alloc_type);
+	alloc_args[0] = len;
+	obj = LLVMBuildCall2(ctx->builder, alloc_type, alloc_fn, alloc_args, 1,
+			     "fstr_obj");
+	data_offset = LLVMConstInt(ctx->i64_type, STRING_DATA_OFFSET, 0);
+	data = LLVMBuildGEP2(ctx->builder, ctx->i8_type, obj, &data_offset, 1,
+			     "fstr_data");
 
-	return buf;
+	/* Second pass: write the formatted bytes into the string data. */
+	size = LLVMBuildAdd(ctx->builder, len,
+			    LLVMConstInt(ctx->i64_type, 1, 0), "size");
+	call_args[0] = data;
+	call_args[1] = size;
+	call_args[2] = fmt;
+	LLVMBuildCall2(ctx->builder, snprintf_type, snprintf_fn,
+		       call_args, 3 + arg_count, "snprintf");
+
+	return data;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1671,6 +1756,7 @@ static LLVMValueRef codegen_closure_call(struct cg_ctx *ctx,
 	LLVMValueRef closure;
 	LLVMValueRef fn_ptr;
 	LLVMValueRef env_ptr;
+	LLVMValueRef call;
 	LLVMTypeRef closure_type;
 	LLVMTypeRef *arg_types;
 	LLVMTypeRef func_type;
@@ -1719,8 +1805,16 @@ static LLVMValueRef codegen_closure_call(struct cg_ctx *ctx,
 		}
 	}
 
-	return LLVMBuildCall2(ctx->builder, func_type, fn_typed, args,
+	call = LLVMBuildCall2(ctx->builder, func_type, fn_typed, args,
 			      total_args, "closure_call");
+
+	/* F-string arguments are owned temporaries the callee borrows. */
+	for (i = 0; i < arg_count; i++) {
+		if (instr_is_owned_string(instr->u.closure_call.args[i]))
+			emit_string_release(ctx, args[i + 1]);
+	}
+
+	return call;
 }
 static LLVMValueRef codegen_instr(struct cg_ctx *ctx,
 				  struct helium_ir_instr *instr)
@@ -1820,6 +1914,9 @@ static int codegen_block(struct cg_ctx *ctx, struct helium_ir_block *block,
 		    instr->kind != HELIUM_IR_INSTR_LET &&
 		    instr_is_owned_heap_value(instr))
 			emit_release(ctx, val, instr->type);
+		if (i < block->instr_count - 1 &&
+		    instr->kind == HELIUM_IR_INSTR_FSTRING)
+			emit_string_release(ctx, val);
 		*out_value = val;
 		if (out_type)
 			*out_type = instr->type;
@@ -1925,8 +2022,7 @@ static int codegen_function(struct cg_ctx *ctx,
 		}
 
 		if (result && LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {
-			if (result_type && is_heap_type(result_type))
-				mark_result_moved(ctx, result);
+			mark_result_moved(ctx, result);
 			release_owned_bindings(ctx, base);
 			LLVMBuildRet(ctx->builder, result);
 		} else if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)) == NULL) {

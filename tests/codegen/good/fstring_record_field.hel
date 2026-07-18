@@ -1,0 +1,19 @@
+// @name fstring_record_field
+// @phase codegen
+// @expect success
+// @note The f-string stored in the error field escapes inside the returned
+// @note record.  Record destructors skip str fields (str is a borrowed
+// @note C-string pointer), so the string is intentionally not reclaimed.
+
+import std.io
+
+type OptResult = { ok: bool, value: str, error: str };
+
+check = (long: str): OptResult {
+    OptResult{ ok: false, value: "", error: f"missing option {long}" }
+};
+
+main = () : IO<()> {
+    r = check("verbose");
+    io.println(r.error)
+}
