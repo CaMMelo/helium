@@ -159,3 +159,20 @@ SPEC-005  ->  SPEC-006
   - `libs/argparse` (SPEC-012): purely functional command-line flag/option
     queries over `main`'s `[str]`, tested with `hel test` inside the package.
 - Next major goal: Phase 4 — self-hosting compiler.
+
+### Known follow-ups
+
+- Imported module-level `f64` constants are emitted with the wrong LLVM type
+  (`examples/modules/use_math.hel` fails to compile — pre-existing codegen bug).
+- Transitive dependency objects are not linked when a module is loaded fresh
+  from cache (Helium-defined cross-module functions in cached packages fail to
+  link; `.hei` carries no link manifest).
+- Value-producing `if` expressions in non-tail position inside `loop` bodies
+  miscompile (`codegen_if` emits `ret` for in-loop branches).
+- Generic exports (e.g. `boxmod.box`) do not monomorphize/link across module
+  boundaries (pre-existing; link fails with undefined reference).
+- Escaped f-strings and `str` fields are not reclaimed (full `str` reference
+  counting is future work; see SPEC-006 known issues).
+- ADTs/`match` do not dispatch at runtime (`codegen_match` first-arm stub;
+  `codegen_variant_alloc` stores no payload) — one coherent ADT task when
+  prioritized.
