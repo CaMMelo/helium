@@ -1,0 +1,12 @@
+// @name option_value
+// @phase argparse
+// @expect success
+// @command sh -c 'rm -f /tmp/helium_argparse_option_value && ./build/bin/helium -I libs/argparse/.helium/std/0.1.0 -L libs/argparse/.helium/std/0.1.0 -l std -I libs/argparse/.helium/argparse/0.1.0 libs/argparse/tests/good/option_value.hel -o /tmp/helium_argparse_option_value && /tmp/helium_argparse_option_value --output file.txt && /tmp/helium_argparse_option_value -o file.txt && /tmp/helium_argparse_option_value --other x && /tmp/helium_argparse_option_value --output'
+
+import std.io;
+import argparse.argparse;
+
+main = (args: [str]) : IO<()> {
+    io.println(argparse.option_value(args, "--output", "-o", "stdout"));
+    io.println(argparse.option_value(args, "--output", "", "stdout"))
+}

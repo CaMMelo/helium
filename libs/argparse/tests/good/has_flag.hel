@@ -1,0 +1,14 @@
+// @name has_flag
+// @phase argparse
+// @expect success
+// @command sh -c 'rm -f /tmp/helium_argparse_has_flag && ./build/bin/helium -I libs/argparse/.helium/std/0.1.0 -L libs/argparse/.helium/std/0.1.0 -l std -I libs/argparse/.helium/argparse/0.1.0 libs/argparse/tests/good/has_flag.hel -o /tmp/helium_argparse_has_flag && /tmp/helium_argparse_has_flag --verbose && /tmp/helium_argparse_has_flag -v && /tmp/helium_argparse_has_flag --other && /tmp/helium_argparse_has_flag'
+
+import std.io;
+import argparse.argparse;
+
+main = (args: [str]) : IO<()> {
+    io.print_bool(argparse.has_flag(args, "--verbose", "-v"));
+    io.println("");
+    io.print_bool(argparse.has_flag(args, "--verbose", ""));
+    io.println("")
+}

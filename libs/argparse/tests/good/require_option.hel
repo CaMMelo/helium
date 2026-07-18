@@ -1,0 +1,15 @@
+// @name require_option
+// @phase argparse
+// @expect success
+// @command sh -c 'rm -f /tmp/helium_argparse_require_option && ./build/bin/helium -I libs/argparse/.helium/std/0.1.0 -L libs/argparse/.helium/std/0.1.0 -l std -I libs/argparse/.helium/argparse/0.1.0 libs/argparse/tests/good/require_option.hel -o /tmp/helium_argparse_require_option && /tmp/helium_argparse_require_option --config app.toml && /tmp/helium_argparse_require_option -c app.toml && /tmp/helium_argparse_require_option --config && /tmp/helium_argparse_require_option'
+
+import std.io;
+import argparse.argparse;
+
+main = (args: [str]) : IO<()> {
+    r = argparse.require_option(args, "--config", "-c");
+    io.print_bool(r.ok);
+    io.println("");
+    io.println(r.value);
+    io.println(r.error)
+}

@@ -1,0 +1,11 @@
+// @name bad_arity
+// @phase argparse
+// @expect error
+
+import std.io;
+import argparse.argparse;
+
+main = (args: [str]) : IO<()> {
+    argparse.has_flag(args, "--verbose");
+    io.println("")
+}

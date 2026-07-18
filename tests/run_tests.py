@@ -261,6 +261,32 @@ def _std_cache_flags(repo: Path) -> list[str]:
     return ["-I", str(vdir), "-L", str(vdir), "-l", "std"]
 
 
+def _project_cache_flags() -> list[str]:
+    """Return driver flags for the tested project's own package caches.
+
+    Only active when --project is set: for every cached package version
+    directory <PROJECT>/.helium/<pkg>/<ver>/ add "-I <dir>" so project tests
+    can import the project's own packages, plus "-L <dir> -l <pkg>" (split
+    form, like `hel` passes them) when a compiled lib<pkg>.a exists there.
+    """
+    flags: list[str] = []
+    if PROJECT is None:
+        return flags
+    cache = PROJECT / ".helium"
+    if not cache.is_dir():
+        return flags
+    for pkg_dir in sorted(p for p in cache.iterdir() if p.is_dir()):
+        if pkg_dir.name.startswith("."):
+            continue
+        for ver_dir in sorted(p for p in pkg_dir.iterdir() if p.is_dir()):
+            if ver_dir.name.startswith("."):
+                continue
+            flags.extend(["-I", str(ver_dir)])
+            if (ver_dir / f"lib{pkg_dir.name}.a").exists():
+                flags.extend(["-L", str(ver_dir), "-l", pkg_dir.name])
+    return flags
+
+
 def run_helium_test(test: Test) -> Result:
     if not COMPILER.exists():
         return Result(test, "SKIP", f"compiler not found: {COMPILER}")
@@ -283,6 +309,7 @@ def run_helium_test(test: Test) -> Result:
             str(COMPILER), str(test.path.resolve()), "-o", str(binary)
         ]
         compile_cmd.extend(_std_cache_flags(repo))
+        compile_cmd.extend(_project_cache_flags())
         test_lib = test.path.parent / "lib"
         if test_lib.is_dir():
             compile_cmd.extend(["-I", str(test_lib)])

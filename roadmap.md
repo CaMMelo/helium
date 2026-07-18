@@ -156,4 +156,6 @@ SPEC-005  ->  SPEC-006
     package through the `.helium/` cache.
   - `make test` builds `libs/std` via the `libs-std` target, and tests that
     import `std.*` resolve against the installed package cache.
+  - `libs/argparse` (SPEC-012): purely functional command-line flag/option
+    queries over `main`'s `[str]`, tested with `hel test` inside the package.
 - Next major goal: Phase 4 — self-hosting compiler.

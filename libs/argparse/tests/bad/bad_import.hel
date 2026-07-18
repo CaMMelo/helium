@@ -1,0 +1,10 @@
+// @name bad_import
+// @phase argparse
+// @expect error
+
+import std.io;
+import argparse.nope;
+
+main = (args: [str]) : IO<()> {
+    io.println("unreachable")
+}

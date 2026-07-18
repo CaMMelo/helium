@@ -1,0 +1,9 @@
+[package]
+name = "argparse"
+version = "0.1.0"
+edition = "2025"
+
+[[dependencies]]
+name = "std"
+version = "0.1.0"
+checksum = "0000000000000000"

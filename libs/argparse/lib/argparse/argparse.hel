@@ -1,0 +1,110 @@
+module argparse;
+
+import std.string;
+import std.list;
+
+/*
+ * argparse - purely functional queries over the [str] argument array that
+ * main receives.  The library performs no I/O; callers print through std.io.
+ *
+ * Conventions:
+ * - Callers pass the full token to match: long is e.g. "--verbose" and
+ *   short is e.g. "-v"; the library prepends nothing.
+ * - Flags match whole tokens only, compared with string.equals.
+ * - An option's value is the token immediately following the option token;
+ *   if the option token is the last element of args, the value is missing.
+ * - Passing "" as short disables short matching.
+ * - Out of scope for v1: "--name=value", short-flag clustering ("-abc"),
+ *   and positional-argument queries.
+ */
+
+/* True when `--long` or `--short` appears as a whole token in args. */
+has_flag = (args: [str], long: str, short: str): bool {
+    loop (i = 0, len = list.length(args)) {
+        if (i >= len) {
+            false
+        } else {
+            if (string.equals(args[i], long)) {
+                true
+            } else {
+                if (string.equals(short, "")) {
+                    recur(i + 1, len)
+                } else {
+                    if (string.equals(args[i], short)) {
+                        true
+                    } else {
+                        recur(i + 1, len)
+                    }
+                }
+            }
+        }
+    }
+};
+
+/* Token following `--long`/`--short`; `default` when absent or value missing. */
+option_value = (args: [str], long: str, short: str, default: str): str {
+    loop (i = 0, len = list.length(args)) {
+        if (i >= len) {
+            default
+        } else {
+            if (string.equals(args[i], long)) {
+                if (i + 1 < len) {
+                    args[i + 1]
+                } else {
+                    default
+                }
+            } else {
+                if (string.equals(short, "")) {
+                    recur(i + 1, len)
+                } else {
+                    if (string.equals(args[i], short)) {
+                        if (i + 1 < len) {
+                            args[i + 1]
+                        } else {
+                            default
+                        }
+                    } else {
+                        recur(i + 1, len)
+                    }
+                }
+            }
+        }
+    }
+};
+
+/* Result of a required option. */
+type Required = { ok: bool, value: str, error: str };
+
+/* ok=true with value when present; ok=false and an f-string error naming the
+   option when absent. error is "" when ok. */
+require_option = (args: [str], long: str, short: str): Required {
+    loop (i = 0, len = list.length(args)) {
+        if (i >= len) {
+            Required{ ok: false, value: "", error: f"missing required option {long}" }
+        } else {
+            if (string.equals(args[i], long)) {
+                if (i + 1 < len) {
+                    Required{ ok: true, value: args[i + 1], error: "" }
+                } else {
+                    err = f"option {long} requires a value";
+                    Required{ ok: false, value: "", error: err }
+                }
+            } else {
+                if (string.equals(short, "")) {
+                    recur(i + 1, len)
+                } else {
+                    if (string.equals(args[i], short)) {
+                        if (i + 1 < len) {
+                            Required{ ok: true, value: args[i + 1], error: "" }
+                        } else {
+                            err = f"option {long} requires a value";
+                            Required{ ok: false, value: "", error: err }
+                        }
+                    } else {
+                        recur(i + 1, len)
+                    }
+                }
+            }
+        }
+    }
+};

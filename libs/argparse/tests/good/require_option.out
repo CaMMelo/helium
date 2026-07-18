@@ -1,0 +1,12 @@
+true
+app.toml
+
+true
+app.toml
+
+false
+
+option --config requires a value
+false
+
+missing required option --config
