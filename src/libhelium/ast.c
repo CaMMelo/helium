@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "types.h"
+
 static char *xstrdup(const char *s)
 {
 	if (!s)
@@ -963,6 +965,32 @@ void helium_type_def_free(struct helium_type_def *def)
 		free(def->u.adt.variants);
 	}
 	free(def);
+}
+
+struct helium_type_def *helium_type_def_copy(const struct helium_type_def *def)
+{
+	struct helium_type_def *copy;
+	size_t i;
+
+	if (!def)
+		return NULL;
+
+	copy = helium_type_def(def->name, def->kind, def->line, def->col);
+	copy->injected = def->injected;
+	for (i = 0; i < def->param_count; i++)
+		helium_type_def_add_param(copy, def->params[i]);
+	if (def->kind == HELIUM_TYPE_DEF_RECORD) {
+		for (i = 0; i < def->u.record.field_count; i++) {
+			struct helium_record_field *field =
+				def->u.record.fields[i];
+
+			helium_type_def_add_record_field(copy,
+				helium_record_field(field->name,
+						    helium_type_copy(field->type),
+						    field->line, field->col));
+		}
+	}
+	return copy;
 }
 
 /* -------------------------------------------------------------------------- */

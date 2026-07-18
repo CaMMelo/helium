@@ -130,6 +130,9 @@ SPEC-005  ->  SPEC-006
   Modules with their own imports compile and link transitively: imported
   declarations are injected before inference, excluded from the emitted
   `.hei`, and dependency objects propagate to the consumer's link line.
+  Record type definitions cross `.hei` files: a consumer can access fields of
+  a record returned by an imported function without redeclaring the type
+  (no transitive re-export of imported record definitions).
 - SPEC-008 standard library: complete. The standard library is the `libs/std`
   package: `std.io`, `std.string` (with `equals`), and `std.list` modules whose
   effectful functions are implemented in package C sources (csrc), built,

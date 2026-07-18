@@ -181,6 +181,9 @@ enum ifc_tok_kind {
 	IFC_TOK_RBRACKET,
 	IFC_TOK_SEMI,
 	IFC_TOK_COLON,
+	IFC_TOK_EQ,
+	IFC_TOK_LBRACE,
+	IFC_TOK_RBRACE,
 };
 
 struct ifc_tok {
@@ -232,6 +235,9 @@ static void ifc_lexer_next(struct ifc_lexer *lex)
 	else if (c == ';') { lex->current.kind = IFC_TOK_SEMI; i++; }
 	else if (c == ':') { lex->current.kind = IFC_TOK_COLON; i++; }
 	else if (c == ',') { lex->current.kind = IFC_TOK_COMMA; i++; }
+	else if (c == '=') { lex->current.kind = IFC_TOK_EQ; i++; }
+	else if (c == '{') { lex->current.kind = IFC_TOK_LBRACE; i++; }
+	else if (c == '}') { lex->current.kind = IFC_TOK_RBRACE; i++; }
 	else if (c == '-' && s[i + 1] == '>') {
 		lex->current.kind = IFC_TOK_ARROW;
 		i += 2;
@@ -482,6 +488,9 @@ void helium_module_interface_free(struct helium_module_interface *iface)
 		free(exp);
 	}
 	free(iface->exports);
+	for (i = 0; i < iface->type_def_count; i++)
+		helium_type_def_free(iface->type_defs[i]);
+	free(iface->type_defs);
 	free(iface);
 }
 
@@ -522,6 +531,104 @@ struct helium_type *helium_module_interface_lookup(
 		if (strcmp(iface->exports[i]->name, name) == 0)
 			return iface->exports[i]->type;
 	}
+	return NULL;
+}
+
+/*
+ * Parse a record type definition line from a .hei file:
+ *
+ *	type IDENT [< IDENT (, IDENT)* >] = { (IDENT : TYPE (, IDENT : TYPE)*)? }
+ *
+ * ADT definitions are not part of the interface format.
+ */
+static struct helium_type_def *ifc_parse_record_def(struct ifc_lexer *lex,
+						    const char *path,
+						    char **error)
+{
+	struct helium_type_def *def;
+
+	/* Consume the 'type' keyword. */
+	ifc_lexer_next(lex);
+
+	if (lex->current.kind != IFC_TOK_IDENT) {
+		format_error(error, "%s: expected type name", path);
+		return NULL;
+	}
+	def = helium_type_def(lex->current.text, HELIUM_TYPE_DEF_RECORD, 0, 0);
+	ifc_lexer_next(lex);
+
+	if (lex->current.kind == IFC_TOK_LT) {
+		ifc_lexer_next(lex);
+		while (lex->current.kind == IFC_TOK_IDENT) {
+			helium_type_def_add_param(def, lex->current.text);
+			ifc_lexer_next(lex);
+			if (lex->current.kind == IFC_TOK_COMMA) {
+				ifc_lexer_next(lex);
+				continue;
+			}
+			break;
+		}
+		if (lex->current.kind != IFC_TOK_GT) {
+			format_error(error, "%s: expected '>'", path);
+			goto fail;
+		}
+		ifc_lexer_next(lex);
+	}
+
+	if (lex->current.kind != IFC_TOK_EQ) {
+		format_error(error, "%s: expected '='", path);
+		goto fail;
+	}
+	ifc_lexer_next(lex);
+
+	if (lex->current.kind != IFC_TOK_LBRACE) {
+		format_error(error, "%s: expected '{'", path);
+		goto fail;
+	}
+	ifc_lexer_next(lex);
+
+	while (lex->current.kind == IFC_TOK_IDENT) {
+		struct helium_record_field *field;
+		struct helium_type *ftype;
+		char *fname = xstrdup(lex->current.text);
+
+		ifc_lexer_next(lex);
+		if (lex->current.kind != IFC_TOK_COLON) {
+			format_error(error, "%s: expected ':'", path);
+			free(fname);
+			goto fail;
+		}
+		ifc_lexer_next(lex);
+
+		lex->type_params = def->params;
+		lex->type_param_count = def->param_count;
+		ftype = ifc_parse_type(lex, error);
+		lex->type_params = NULL;
+		lex->type_param_count = 0;
+		if (!ftype) {
+			free(fname);
+			goto fail;
+		}
+		field = helium_record_field(fname, ftype, 0, 0);
+		helium_type_def_add_record_field(def, field);
+		free(fname);
+
+		if (lex->current.kind == IFC_TOK_COMMA) {
+			ifc_lexer_next(lex);
+			continue;
+		}
+		break;
+	}
+
+	if (lex->current.kind != IFC_TOK_RBRACE) {
+		format_error(error, "%s: expected '}'", path);
+		goto fail;
+	}
+	ifc_lexer_next(lex);
+	return def;
+
+fail:
+	helium_type_def_free(def);
 	return NULL;
 }
 
@@ -578,6 +685,25 @@ struct helium_module_interface *helium_module_interface_load(
 			iface = helium_module_interface_new(name, NULL, NULL);
 			free(name);
 			have_module = 1;
+			continue;
+		}
+
+		if (lex.current.kind == IFC_TOK_IDENT &&
+		    strcmp(lex.current.text, "type") == 0) {
+			struct helium_type_def *def;
+
+			if (!have_module) {
+				format_error(error,
+					     "%s: type before module declaration",
+					     path);
+				goto fail;
+			}
+			def = ifc_parse_record_def(&lex, path, error);
+			if (!def)
+				goto fail;
+			append_ptr((void ***)&iface->type_defs,
+				   &iface->type_def_count,
+				   &iface->type_def_capacity, def);
 			continue;
 		}
 
@@ -691,6 +817,52 @@ int helium_module_interface_emit(struct helium_module *module,
 
 	module_name = module->name ? module->name : "main";
 	fprintf(f, "module %s\n", module_name);
+
+	/*
+	 * Record type definitions travel with the interface so consumers can
+	 * access fields of records returned by imported functions.  Injected
+	 * defs (this module's own imports) are not re-exported.
+	 */
+	for (i = 0; i < module->decl_count; i++) {
+		struct helium_top_decl *decl = module->decls[i];
+		struct helium_type_def *def;
+		size_t j;
+
+		if (decl->kind != HELIUM_DECL_TYPE)
+			continue;
+		def = decl->u.type_def;
+		if (def->kind != HELIUM_TYPE_DEF_RECORD || def->injected)
+			continue;
+
+		fprintf(f, "type %s", def->name);
+		if (def->param_count > 0) {
+			fprintf(f, "<");
+			for (j = 0; j < def->param_count; j++) {
+				if (j)
+					fprintf(f, ", ");
+				fprintf(f, "%s", def->params[j]);
+			}
+			fprintf(f, ">");
+		}
+		fprintf(f, " = {");
+		for (j = 0; j < def->u.record.field_count; j++) {
+			struct helium_record_field *field =
+				def->u.record.fields[j];
+			char *field_type = ifc_type_to_string(field->type);
+
+			if (!field_type) {
+				format_error(error,
+					     "%s: failed to serialize type for '%s'",
+					     path, field->name);
+				fclose(f);
+				return -1;
+			}
+			fprintf(f, "%s%s: %s", j ? ", " : " ", field->name,
+				field_type);
+			free(field_type);
+		}
+		fprintf(f, " }\n");
+	}
 
 	for (i = 0; i < module->decl_count; i++) {
 		struct helium_top_decl *decl = module->decls[i];

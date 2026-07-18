@@ -1,0 +1,9 @@
+// @name module_record_unknown_field
+// @phase modules
+// @expect error
+// @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; printf "module recmod;\n\ntype Pair = { first: i32, second: str }\n\nmake = (a: i32, b: str): Pair {\n    Pair{ first: a, second: b }\n};\n" > "$tmp/recmod.hel"; printf "import recmod\n\nmain = () : IO<()> {\n    r = recmod.make(42, \"hello\");\n    r.nope\n}\n" > "$tmp/main.hel"; ./build/bin/helium -I "$tmp" "$tmp/main.hel" -o "$tmp/a.out"'
+// @match unknown field
+
+// Field access on a record whose definition arrived through the provider's
+// .hei file is still type-checked in the consumer: reading a field the record
+// does not have must be rejected with an "unknown field" error.

@@ -404,6 +404,30 @@ static void inject_imported_decls(struct helium_module *module,
 
 		if (!iface)
 			continue;
+		for (j = 0; j < iface->type_def_count; j++) {
+			struct helium_type_def *def = iface->type_defs[j];
+			struct helium_top_decl *decl;
+			size_t k;
+			int found = 0;
+
+			/* Local or previously injected defs win; first wins. */
+			for (k = 0; k < module->decl_count; k++) {
+				struct helium_top_decl *existing =
+					module->decls[k];
+
+				if (existing->kind == HELIUM_DECL_TYPE &&
+				    strcmp(existing->u.type_def->name,
+					   def->name) == 0) {
+					found = 1;
+					break;
+				}
+			}
+			if (found)
+				continue;
+			decl = helium_decl_type(helium_type_def_copy(def));
+			decl->u.type_def->injected = 1;
+			module_insert_decl_at(module, decl, 0);
+		}
 		for (j = 0; j < iface->export_count; j++) {
 			struct helium_interface_export *exp = iface->exports[j];
 			char *mangled;

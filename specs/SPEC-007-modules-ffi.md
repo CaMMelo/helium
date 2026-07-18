@@ -47,6 +47,22 @@ add : fn(i32, i32) -> i32
 length<T> : fn([T; 0]) -> i32
 ```
 
+Record type definitions are part of the format.  They appear after the
+`module` line and before the export signatures:
+
+```
+module argparse
+type Required = { ok: bool, value: str, error: str }
+type Box<T> = { value: T }
+require_option : fn(str) -> Required
+```
+
+Grammar: `type IDENT [< IDENT (, IDENT)* >] = { IDENT : TYPE (, IDENT : TYPE)* }`,
+where TYPE is the same type grammar used in export signatures.  Field order is
+declaration order and is preserved across the round trip, so provider and
+consumer agree on the record layout.  ADT definitions are not part of the
+format, and a module does not re-export record definitions it imported itself.
+
 ## Acceptance criteria
 
 - [x] A program imports a local `lib/` module (installed into `.helium/` by
@@ -60,3 +76,6 @@ length<T> : fn([T; 0]) -> i32
 - [x] A module with its own imports (e.g. a lib module importing `std.string`)
       compiles to `.o`/`.hei`; the emitted `.hei` exports only the module's own
       names; dependents link and run.
+- [x] Record type definitions are emitted to and loaded from `.hei` files; a
+      consumer can access fields of a record returned by an imported function
+      without redeclaring the type.

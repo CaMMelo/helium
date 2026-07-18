@@ -1,0 +1,12 @@
+// @name module_record
+// @phase modules
+// @expect success
+// @command bash -c 'tmp=$(mktemp -d); trap "rm -rf \"$tmp\"" EXIT; printf "module recmod;\n\ntype Pair = { first: i32, second: str }\n\nmake = (a: i32, b: str): Pair {\n    Pair{ first: a, second: b }\n};\n" > "$tmp/recmod.hel"; printf "import std.io\nimport recmod\n\nmain = () : IO<()> {\n    r = recmod.make(42, \"hello\");\n    io.print_int(r.first);\n    io.println(\"\");\n    io.println(r.second);\n}\n" > "$tmp/main.hel"; ./build/bin/helium -I libs/std/.helium/std/0.1.0 -L libs/std/.helium/std/0.1.0 -l std -I "$tmp" "$tmp/main.hel" -o "$tmp/a.out" && "$tmp/a.out"'
+// @match ^42$\n^hello$
+
+// This test is driven by the @command above: the provider module defines a
+// record type and a function returning it, and the consumer reads the record's
+// fields without redeclaring the type - the definition crosses the .hei
+// interface file.  A hermetic dir is required because stale .o/.hei next to
+// the sources would skip on-demand compilation and mask the interface
+// round-trip.

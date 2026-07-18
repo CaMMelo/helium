@@ -28,6 +28,9 @@ struct helium_module_interface {
 	struct helium_interface_export **exports;
 	size_t export_count;
 	size_t export_capacity;
+	struct helium_type_def **type_defs;
+	size_t type_def_count;
+	size_t type_def_capacity;
 };
 
 struct helium_module_interface *helium_module_interface_new(const char *name,

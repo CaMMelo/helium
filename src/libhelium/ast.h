@@ -422,6 +422,7 @@ struct helium_type_def {
 			size_t variant_capacity;
 		} adt;
 	} u;
+	int injected;
 	int line;
 	int col;
 };
@@ -435,6 +436,7 @@ void helium_type_def_add_record_field(struct helium_type_def *def,
 void helium_type_def_add_variant(struct helium_type_def *def,
 				 struct helium_variant *variant);
 void helium_type_def_free(struct helium_type_def *def);
+struct helium_type_def *helium_type_def_copy(const struct helium_type_def *def);
 
 /* -------------------------------------------------------------------------- */
 /* Bindings and imports                                                       */
