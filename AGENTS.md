@@ -75,6 +75,8 @@ code. Avoid adding features that are not requested by the current task.
   them.
 - Update the roadmap and spec status when you complete or block a task.
 - Delegated work follows the persona contracts in `agents/`:
+  - `agents/project-manager.md` — the main agent; the user's only point of
+    contact. Plans, dispatches, coordinates, and reports; never writes code.
   - `agents/tech-lead.md` — read-only architecture and technology advice.
   - `agents/senior-developer.md` — task scoping and pre-merge code review.
   - `agents/staff-developer.md` — implementation of one scoped task at a time.
